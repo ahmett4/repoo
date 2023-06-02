@@ -45,6 +45,8 @@
             llvmPackages.libclang
             clang
             pkg-config
+            jq
+            autoconf automake libtool # for jq_rs static linking
           ]
           ++ lib.optionals stdenv.isDarwin
           [

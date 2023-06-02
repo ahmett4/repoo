@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
-
+use jq_rs;
 use glob::{glob, Paths};
-use tokio::io::AsyncReadExt;
+use tokio::{io::AsyncReadExt};
 
 use super::{
     get_blockchain_length, get_state_hash, is_valid_block_file,
@@ -16,6 +16,7 @@ pub enum SearchRecursion {
 pub struct BlockParser {
     pub log_path: PathBuf,
     pub recursion: SearchRecursion,
+    jq_program: jq_rs::JqProgram,
     paths: Paths,
 }
 
@@ -36,9 +37,11 @@ impl BlockParser {
             };
             let log_path = log_path.to_owned();
             let paths = glob(&pattern).expect("Failed to read glob pattern");
+            let jq_program = jq_rs::compile("").map_err(|err| anyhow::Error::msg(err.to_string()))?;
             Ok(Self {
                 log_path,
                 recursion,
+                jq_program,
                 paths,
             })
         } else {
@@ -78,7 +81,7 @@ impl BlockParser {
 
     /// get the precomputed block with supplied hash
     /// it must exist ahead of the current block parser file
-    #[async_recursion::async_recursion]
+    #[async_recursion::async_recursion(?Send)]
     pub async fn get_precomputed_block(
         &mut self,
         state_hash: &str,
@@ -114,10 +117,15 @@ impl BlockParser {
 
             log_file.read_to_end(&mut log_file_contents).await?;
 
+            let log_file_str = unsafe { std::str::from_utf8_unchecked(&log_file_contents)};
+
+            let jqd_contents = self.jq_program.run(log_file_str)
+                .map_err(|err| anyhow::Error::msg(err.to_string()))?;
+
             let precomputed_block = PrecomputedBlock::from_log_contents(BlockLogContents {
                 state_hash,
                 blockchain_length,
-                contents: log_file_contents,
+                contents: jqd_contents.into_bytes(),
             })?;
 
             Ok(precomputed_block)
