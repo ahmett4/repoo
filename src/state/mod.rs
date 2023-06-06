@@ -53,10 +53,6 @@ impl IndexerState {
         })
     }
 
-    pub fn prune_canonical(&mut self) -> anyhow::Result<()> {
-        todo!()
-    }
-
     pub fn add_block(
         &mut self,
         precomputed_block: &PrecomputedBlock,

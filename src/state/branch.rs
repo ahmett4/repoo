@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
-use id_tree::{InsertBehavior::*, Node, NodeId, Tree};
+use id_tree::{InsertBehavior::{*, self}, Node, NodeId, Tree};
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
 
@@ -283,6 +283,35 @@ where
             leaf.block.height += 1;
         }
         new_root_id
+    }
+
+    pub fn prune(&mut self, prune_len: usize) -> anyhow::Result<()> {
+        let root_id = self.branches.root_node_id().expect("root node on branch is always valid");
+        let mut current_chain = vec![ root_id.clone() ];
+        for node_id in self.branches
+            .traverse_pre_order_ids(root_id)?
+            .into_iter() 
+        {
+            if current_chain.len() > prune_len {
+                let new_root = self.branches
+                    .get(&node_id).expect("node exists, from iterator");
+                let mut new_tree = Tree::new();
+                let new_root_id = new_tree.insert(
+                    Node::new(new_root.data().clone()), 
+                    InsertBehavior::AsRoot
+                ).expect("insert cannot fail");
+                for child_id in self.branches
+                    .traverse_level_order_ids(&new_root_id)
+                    .expect("new_root_id received from .insert() call, is valid")
+                {
+
+                }
+
+            }
+            current_chain.push(node_id.clone());
+        }
+
+        Ok(())
     }
 
     pub fn longest_chain(&self) -> Vec<Leaf<T>> {
