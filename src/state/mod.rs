@@ -1,3 +1,5 @@
+use tracing::{instrument, debug, error};
+
 use crate::block::{precomputed::PrecomputedBlock, store::BlockStoreConn, BlockHash};
 
 use self::{
@@ -53,6 +55,7 @@ impl IndexerState {
     /// Adds the block to the witness tree and the precomputed block to the db
     ///
     /// Errors if the block is already present in the witness tree
+    #[instrument]
     pub fn add_block(
         &mut self,
         precomputed_block: &PrecomputedBlock,
@@ -60,10 +63,12 @@ impl IndexerState {
         // check that the block doesn't already exist in the db
         let state_hash = &precomputed_block.state_hash;
         if let Some(block_store) = self.block_store.as_ref() {
+            debug!("checking if block is already in the store");
             match block_store.get_block(state_hash) {
                 Err(err) => return Err(err),
                 Ok(None) => (),
                 Ok(_) => {
+                    error!("block already in rocksdb");
                     return Err(anyhow::Error::msg(format!(
                     "Block with state hash '{state_hash:?}' is already present in the block store"
                 )))
@@ -71,6 +76,7 @@ impl IndexerState {
             }
 
             // add precomputed block to the db
+            debug!("adding block to rocksdb {}", &state_hash);
             block_store.add_block(precomputed_block)?;
         }
 
@@ -96,6 +102,7 @@ impl IndexerState {
 
                     // if the block is already in the dangling branch, do nothing
                     if precomputed_block.state_hash == dangling_branch.root.state_hash.0 {
+                        debug!("block not added");
                         return Ok(ExtensionType::BlockNotAdded);
                     }
                 }
@@ -105,9 +112,11 @@ impl IndexerState {
                     for (num_removed, index_to_remove) in branches_to_remove.iter().enumerate() {
                         self.dangling_branches.remove(index_to_remove - num_removed);
                     }
+                    debug!("root branch extended with Complex Extension");
                     return Ok(ExtensionType::RootComplex);
                 } else {
                     // if there aren't any branches that are connected
+                    debug!("root branch extended with Simple Extension");
                     return Ok(ExtensionType::RootSimple);
                 }
             }
@@ -153,6 +162,7 @@ impl IndexerState {
 
                             // if the block is already in a dangling branch, do nothing
                             if precomputed_block.state_hash == dangling_branch.root.state_hash.0 {
+                                debug!("block not added");
                                 return Ok(ExtensionType::BlockNotAdded);
                             }
                         }
@@ -176,6 +186,7 @@ impl IndexerState {
 
                         // if the block is already in a dangling branch, do nothing
                         if precomputed_block.state_hash == dangling_branch.root.state_hash.0 {
+                            debug!("block not added");
                             return Ok(ExtensionType::BlockNotAdded);
                         }
 
@@ -206,6 +217,7 @@ impl IndexerState {
 
                     // if the block is already in a dangling branch, do nothing
                     if precomputed_block.state_hash == dangling_branch.root.state_hash.0 {
+                        debug!("block not added");
                         return Ok(ExtensionType::BlockNotAdded);
                     }
 
@@ -243,11 +255,18 @@ impl IndexerState {
                     self.dangling_branches.remove(index);
                 }
                 self.dangling_branches.push(extended_branch);
+                debug!("dangling branch has been added with Complex Extension");
                 return Ok(ExtensionType::DanglingComplex);
             } else {
                 return match direction {
-                    ExtensionDirection::Forward => Ok(ExtensionType::DanglingSimpleForward),
-                    ExtensionDirection::Reverse => Ok(ExtensionType::DanglingSimpleReverse),
+                    ExtensionDirection::Forward => { 
+                        debug!("dangling branch has been extended with Simple Forward Extension");
+                        Ok(ExtensionType::DanglingSimpleForward)
+                    },
+                    ExtensionDirection::Reverse => {
+                        debug!("dangling branch has been extended with Simple Reverse Extension");
+                        Ok(ExtensionType::DanglingSimpleReverse)
+                    },
                 };
             }
         }
@@ -260,6 +279,8 @@ impl IndexerState {
             )
             .expect("cannot fail"),
         );
+
+        debug!("block has created a new dangling branch");
         Ok(ExtensionType::DanglingNew)
     }
 
