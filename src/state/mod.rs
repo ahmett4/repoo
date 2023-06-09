@@ -39,12 +39,17 @@ pub enum ExtensionDirection {
 }
 
 impl IndexerState {
+    #[instrument]
     pub fn new(
         root_hash: BlockHash,
         genesis_ledger: GenesisLedger,
         rocksdb_path: Option<&std::path::Path>,
     ) -> anyhow::Result<Self> {
-        let block_store = rocksdb_path.map(|path| BlockStoreConn::new(path).unwrap());
+        let block_store = rocksdb_path.map(|path| {
+            debug!("initializing RocksDB connection at {}", path.display());
+            BlockStoreConn::new(path).unwrap()
+        });
+
         Ok(Self {
             root_branch: Branch::new_genesis(root_hash, Some(genesis_ledger)),
             dangling_branches: Vec::new(),
