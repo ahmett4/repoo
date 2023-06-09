@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 use id_tree::{InsertBehavior::*, Node, NodeId, Tree};
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
+use tracing::{instrument, debug};
 
 use crate::block::{precomputed::PrecomputedBlock, Block, BlockHash};
 
@@ -79,7 +80,7 @@ impl Branch<LedgerDiff> {
 
 impl<T> Branch<T>
 where
-    T: ExtendWithLedgerDiff + Clone,
+    T: ExtendWithLedgerDiff + Clone + std::fmt::Debug,
 {
     pub fn new(root_precomputed: &PrecomputedBlock, ledger: T) -> anyhow::Result<Self> {
         let root = Block::from_precomputed(root_precomputed, 0);
@@ -120,6 +121,7 @@ where
             let incoming_prev_hash = BlockHash::previous_state_hash(block);
             if incoming_prev_hash == node.data().block.state_hash {
                 let new_block = Block::from_precomputed(block, node.data().block.height + 1);
+                debug!("extending block {:?} with block {:?}", &incoming_prev_hash, &new_block.state_hash);
                 let new_ledger = node
                     .data()
                     .ledger
@@ -156,6 +158,7 @@ where
         None
     }
 
+    #[instrument]
     pub fn merge_on(&mut self, junction_id: &NodeId, incoming: &mut Branch<LedgerDiff>) {
         let mut merge_id_map = HashMap::new();
         // associate the incoming tree's root node id with it's new id in the base tree
