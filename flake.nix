@@ -110,7 +110,7 @@
 
           devShells.profiling = mkShell {
             buildInputs = developmentDependencies ++
-              [ libcxx ];
+              [ libcxx llvmPackages.libclang ];
             shellHook = ''
               export LIBCLANG_PATH="${LIBCLANG_PATH}"
               export BINDGEN_EXTRA_CLANG_ARGS="${BINDGEN_EXTRA_CLANG_ARGS}"
