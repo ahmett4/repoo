@@ -15,10 +15,6 @@ use mina_indexer::{
 use tracing::{debug, error, info, instrument};
 use uuid::Uuid;
 
-#[cfg(feature = "dhat-heap")]
-#[global_allocator]
-static ALLOC: dhat::Alloc = dhat::Alloc;
-
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct ServerArgs {
@@ -98,9 +94,6 @@ pub async fn parse_command_line_arguments() -> anyhow::Result<IndexerConfigurati
 #[instrument]
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    #[cfg(feature = "dhat-heap")]
-    let _profiler = dhat::Profiler::new_heap();
-
     info!("started mina-indexer-server");
     let IndexerConfiguration {
         root_hash,

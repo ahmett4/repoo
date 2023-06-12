@@ -4,18 +4,13 @@ version = "0.1.1"
 edition = "2021"
 
 [[bin]]
-name = "mina-indexer-server"
-
-[[bin]]
-name = "mina-indexer-client"
-
-[[bin]]
 name = "mina-indexer"
 test = false
 bench = false
 
 [profile.release]
 debug = 1
+lto = true
 
 [features]
 dhat-heap = []
@@ -53,6 +48,7 @@ tracing = "0.1.37"
 tracing-appender = "0.2.2"
 tracing-subscriber = "0.3.17"
 dhat = "0.3.2"
+bytesize = "1.2.0"
 
 [dependencies.tokio]
 version = "1.25.0"
