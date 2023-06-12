@@ -32,7 +32,7 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
 
     #[cfg(feature = "dhat-heap")]
     ctrlc::set_handler(move || {
-        profiler.drop();
+        drop(profiler);
     });
 
     let args = Cli::parse();
