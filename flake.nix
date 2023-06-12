@@ -109,12 +109,10 @@
           };
 
           devShells.profiling = mkShell {
-            buildInputs = developmentDependencies ++ [ pkgs.glibc ];
+            buildInputs = developmentDependencies;
             shellHook = ''
               export LIBCLANG_PATH="${LIBCLANG_PATH}"
               export BINDGEN_EXTRA_CLANG_ARGS="${BINDGEN_EXTRA_CLANG_ARGS}"
-              export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${pkgs.glibc}/lib
-              export CXXFLAGS="--rpath=${pkgs.glibc}/lib,--dynamic-linker=${pkgs.glibc}.lib/ld-linux.so.2"
               export _RJEM_MALLOC_CONF=prof_leak:true,lg_prof_sample:0,prof_final:true
               export LD_PRELOAD=${pkgs.jemalloc}/lib/libjemalloc.so.2
             '';
