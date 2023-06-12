@@ -15,6 +15,13 @@ use mina_indexer::{
 use tracing::{debug, error, info, instrument};
 use uuid::Uuid;
 
+#[cfg(not(target_env = "msvc"))]
+use jemallocator::Jemalloc;
+
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct ServerArgs {
