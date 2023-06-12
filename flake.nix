@@ -109,8 +109,10 @@
           };
 
           devShells.profiling = mkShell {
-            buildInputs = developmentDependencies ++ [ pkgs.glibc pkgs.libclang ];
+            buildInputs = developmentDependencies ++ [ pkgs.glibc ];
             shellHook = ''
+              export LIBCLANG_PATH="${LIBCLANG_PATH}"
+              export BINDGEN_EXTRA_CLANG_ARGS="${BINDGEN_EXTRA_CLANG_ARGS}"
               export _RJEM_MALLOC_CONF=prof_leak:true,lg_prof_sample:0,prof_final:true
               export LD_PRELOAD=${pkgs.jemalloc}/lib/libjemalloc.so.2
             '';
