@@ -2,6 +2,10 @@ use clap::{Parser, Subcommand};
 use mina_indexer::{client, server};
 use std::error::Error;
 
+#[cfg(feature = "dhat-heap")]
+#[global_allocator]
+static ALLOC: dhat::Alloc = dhat::Alloc;
+
 #[derive(Parser, Debug)]
 #[command(name = "mina-indexer", author, version, about, long_about = Some("Mina Indexer\n\n\
 Efficiently index and query the Mina blockchain"))]
@@ -23,6 +27,9 @@ enum IndexerCommand {
 
 #[tokio::main]
 pub async fn main() -> Result<(), Box<dyn Error>> {
+    #[cfg(feature = "dhat-heap")]
+    let _profiler = dhat::Profiler::new_heap();
+
     let args = Cli::parse();
 
     if let Some(arguments) = &args.command {
