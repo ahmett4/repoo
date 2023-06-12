@@ -112,7 +112,7 @@
             buildInputs = developmentDependencies;
             shellHook = ''
               export MALLOC_CONF=prof_leak:true,lg_prof_sample:0,prof_final:true
-              export LD_PRELOAD=${pkgs.jemalloc}/lib/libjemalloc.so.w
+              export LD_PRELOAD=${pkgs.jemalloc}/lib/libjemalloc.so.2
             '';
           };
         }
