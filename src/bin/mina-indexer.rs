@@ -28,7 +28,12 @@ enum IndexerCommand {
 #[tokio::main]
 pub async fn main() -> Result<(), Box<dyn Error>> {
     #[cfg(feature = "dhat-heap")]
-    let _profiler = dhat::Profiler::new_heap();
+    let profiler = dhat::Profiler::new_heap();
+
+    #[cfg(feature = "dhat-heap")]
+    ctrlc::set_handler(move || {
+        profiler.drop();
+    });
 
     let args = Cli::parse();
 
