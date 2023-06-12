@@ -113,6 +113,7 @@
             shellHook = ''
               export LIBCLANG_PATH="${LIBCLANG_PATH}"
               export BINDGEN_EXTRA_CLANG_ARGS="${BINDGEN_EXTRA_CLANG_ARGS}"
+              export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${pkgs.glibc}/lib
               export _RJEM_MALLOC_CONF=prof_leak:true,lg_prof_sample:0,prof_final:true
               export LD_PRELOAD=${pkgs.jemalloc}/lib/libjemalloc.so.2
             '';
