@@ -107,6 +107,14 @@
               export BINDGEN_EXTRA_CLANG_ARGS="${BINDGEN_EXTRA_CLANG_ARGS}"
             '';
           };
+
+          devShells.profiling = mkShell {
+            buildInputs = developmentDependencies;
+            shellHook = ''
+              export MALLOC_CONF=prof_leak:true,lg_prof_sample:0,prof_final:true
+              export LD_PRELOAD=${pkgs.jemalloc}/lib/libjemalloc.so.w
+            '';
+          };
         }
     );
 }
