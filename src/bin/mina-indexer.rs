@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use mina_indexer::{client, server};
-use std::error::Error;
+use std::{error::Error, sync::Arc};
 
 #[cfg(feature = "dhat-heap")]
 #[global_allocator]
@@ -28,12 +28,13 @@ enum IndexerCommand {
 #[tokio::main]
 pub async fn main() -> Result<(), Box<dyn Error>> {
     #[cfg(feature = "dhat-heap")]
-    let profiler = dhat::Profiler::new_heap();
+    let profiler = Arc::new(dhat::Profiler::new_heap());
 
     #[cfg(feature = "dhat-heap")]
     ctrlc::set_handler(move || {
-        drop(profiler);
-    });
+        let profiler = profiler.clone();
+        drop(profiler.to_owned());
+    })?;
 
     let args = Cli::parse();
 
