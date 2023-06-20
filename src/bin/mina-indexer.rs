@@ -26,6 +26,6 @@ enum IndexerCommand {
 pub async fn main() -> anyhow::Result<()> {
     match Cli::parse().command {
         IndexerCommand::Client { args } => client::run(&args).await,
-        IndexerCommand::Server(args) => server::run(args.clone()).await,
+        IndexerCommand::Server(args) => server::run(&args).await,
     }
 }

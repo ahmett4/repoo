@@ -81,15 +81,15 @@ pub struct IndexerConfiguration {
 
 #[instrument]
 pub async fn handle_command_line_arguments(
-    args: ServerArgs,
+    args: &ServerArgs,
 ) -> anyhow::Result<IndexerConfiguration> {
     debug!("Parsing server args");
     let root_hash = BlockHash(args.root_hash.to_string());
-    let startup_dir = args.startup_dir;
-    let watch_dir = args.watch_dir;
-    let database_dir = args.database_dir;
+    let startup_dir = args.startup_dir.clone();
+    let watch_dir = args.watch_dir.clone();
+    let database_dir = args.database_dir.clone();
     let keep_noncanonical_blocks = args.keep_non_canonical_blocks;
-    let log_dir = args.log_dir;
+    let log_dir = args.log_dir.clone();
     let log_level = args.log_level;
     let log_level_stdout = args.log_level_stdout;
     let ignore_db = args.ignore_db;
@@ -141,7 +141,7 @@ pub async fn handle_command_line_arguments(
 }
 
 #[instrument]
-pub async fn run(args: ServerArgs) -> Result<(), anyhow::Error> {
+pub async fn run(args: &ServerArgs) -> Result<(), anyhow::Error> {
     debug!("Checking that a server instance isn't already running");
     LocalSocketStream::connect(SOCKET_NAME)
         .await
