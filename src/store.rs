@@ -4,7 +4,7 @@ use rocksdb::{ColumnFamilyDescriptor, DBWithThreadMode, MultiThreaded};
 
 use crate::{
     block::{precomputed::PrecomputedBlock, store::BlockStore, BlockHash},
-    state::ledger::{store::LedgerStore, Ledger}, ROCKSDB_WRITE_BUFFER_SIZE,
+    state::ledger::{store::LedgerStore, Ledger}, ROCKSDB_WRITE_BUFFER_SIZE, ROCKSDB_TARGET_FILE_SIZE,
 };
 
 #[derive(Debug)]
@@ -37,6 +37,7 @@ impl IndexerStore {
         database_opts.create_missing_column_families(true);
         database_opts.create_if_missing(true);
         database_opts.set_write_buffer_size(ROCKSDB_WRITE_BUFFER_SIZE);
+        database_opts.set_target_file_size_base(ROCKSDB_TARGET_FILE_SIZE);
         let database = rocksdb::DBWithThreadMode::open_cf_descriptors(
             &database_opts,
             path,
