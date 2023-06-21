@@ -6,7 +6,7 @@ use std::{
 use lazy_static::lazy_static;
 use rocksdb::{ColumnFamilyDescriptor, DBWithThreadMode, MultiThreaded};
 use serde_derive::{Deserialize, Serialize};
-use tracing::{instrument, info};
+use tracing::{instrument, debug};
 
 use crate::{
     block::{precomputed::PrecomputedBlock, store::BlockStore, BlockHash},
@@ -38,18 +38,19 @@ pub fn initialize_rocksdb_tuning_configuration() -> RocksDBTuningConfiguration {
             let utf8 = String::from_utf8_lossy(&contents);
             match serde_yaml::from_str(&utf8) {
                 Ok(config) => {
-                    info!("parsed tuning configuration at {}", ROCKSDB_TUNING_CONFIG_FILE);
+                    debug!("parsed tuning configuration at {}: {:?}", ROCKSDB_TUNING_CONFIG_FILE, config);
                     Ok(config)
                 }
                 Err(e) => Err(anyhow::Error::from(e))
             }
         })
         .unwrap_or({
-            info!("using default tuning configuration");
-            RocksDBTuningConfiguration {
+            let tuning_config = RocksDBTuningConfiguration {
                 target_file_size: ROCKSDB_TARGET_FILE_SIZE,
                 write_buffer_size: ROCKSDB_WRITE_BUFFER_SIZE,
-            }
+            };
+            debug!("using default tuning configuration: {:?}", tuning_config);
+            tuning_config
         })
 }
 
