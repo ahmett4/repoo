@@ -6,6 +6,7 @@ use std::{
 use lazy_static::lazy_static;
 use rocksdb::{ColumnFamilyDescriptor, DBWithThreadMode, MultiThreaded};
 use serde_derive::{Deserialize, Serialize};
+use tracing::{instrument, info};
 
 use crate::{
     block::{precomputed::PrecomputedBlock, store::BlockStore, BlockHash},
@@ -24,6 +25,7 @@ lazy_static! {
         initialize_rocksdb_tuning_configuration();
 }
 
+#[instrument]
 pub fn initialize_rocksdb_tuning_configuration() -> RocksDBTuningConfiguration {
     std::fs::File::open(ROCKSDB_TUNING_CONFIG_FILE)
         .map_err(|e| anyhow::Error::from(e))
@@ -34,11 +36,20 @@ pub fn initialize_rocksdb_tuning_configuration() -> RocksDBTuningConfiguration {
         })
         .and_then(|contents| {
             let utf8 = String::from_utf8_lossy(&contents);
-            serde_yaml::from_str(&utf8).map_err(|e| anyhow::Error::from(e))
+            match serde_yaml::from_str(&utf8) {
+                Ok(config) => {
+                    info!("parsed tuning configuration at {}", ROCKSDB_TUNING_CONFIG_FILE);
+                    Ok(config)
+                }
+                Err(e) => Err(anyhow::Error::from(e))
+            }
         })
-        .unwrap_or(RocksDBTuningConfiguration {
-            target_file_size: ROCKSDB_TARGET_FILE_SIZE,
-            write_buffer_size: ROCKSDB_WRITE_BUFFER_SIZE,
+        .unwrap_or({
+            info!("using default tuning configuration");
+            RocksDBTuningConfiguration {
+                target_file_size: ROCKSDB_TARGET_FILE_SIZE,
+                write_buffer_size: ROCKSDB_WRITE_BUFFER_SIZE,
+            }
         })
 }
 
