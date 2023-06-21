@@ -44,7 +44,7 @@ pub fn initialize_rocksdb_tuning_configuration() -> RocksDBTuningConfiguration {
                 Err(e) => Err(anyhow::Error::from(e))
             }
         })
-        .unwrap_or({
+        .unwrap_or_else( |_e| {
             let tuning_config = RocksDBTuningConfiguration {
                 target_file_size: ROCKSDB_TARGET_FILE_SIZE,
                 write_buffer_size: ROCKSDB_WRITE_BUFFER_SIZE,
