@@ -1,18 +1,17 @@
-use std::{path::{Path, PathBuf}, io::Read};
+use std::{
+    io::Read,
+    path::{Path, PathBuf},
+};
 
 use lazy_static::lazy_static;
 use rocksdb::{ColumnFamilyDescriptor, DBWithThreadMode, MultiThreaded};
-use serde_derive::{Serialize, Deserialize};
+use serde_derive::{Deserialize, Serialize};
 
 use crate::{
     block::{precomputed::PrecomputedBlock, store::BlockStore, BlockHash},
-    state::ledger::{store::LedgerStore, Ledger}, ROCKSDB_WRITE_BUFFER_SIZE, ROCKSDB_TARGET_FILE_SIZE, ROCKSDB_TUNING_CONFIG_FILE,
+    state::ledger::{store::LedgerStore, Ledger},
+    ROCKSDB_TARGET_FILE_SIZE, ROCKSDB_TUNING_CONFIG_FILE, ROCKSDB_WRITE_BUFFER_SIZE,
 };
-
-lazy_static! {
-    static ref ROCKSDB_TUNING_CONFIGURATION: RocksDBTuningConfiguration
-        = initialize_rocksdb_tuning_configuration();
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RocksDBTuningConfiguration {
@@ -20,8 +19,14 @@ pub struct RocksDBTuningConfiguration {
     write_buffer_size: usize,
 }
 
+lazy_static! {
+    static ref ROCKSDB_TUNING_CONFIGURATION: RocksDBTuningConfiguration =
+        initialize_rocksdb_tuning_configuration();
+}
+
 pub fn initialize_rocksdb_tuning_configuration() -> RocksDBTuningConfiguration {
-    std::fs::File::open(ROCKSDB_TUNING_CONFIG_FILE).map_err(|e| anyhow::Error::from(e))
+    std::fs::File::open(ROCKSDB_TUNING_CONFIG_FILE)
+        .map_err(|e| anyhow::Error::from(e))
         .and_then(|mut file| {
             let mut contents = Vec::new();
             file.read_to_end(&mut contents)?;
