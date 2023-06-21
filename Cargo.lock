@@ -1614,6 +1614,7 @@ dependencies = [
  "glob",
  "id_tree",
  "interprocess",
+ "lazy_static",
  "log",
  "mina-serialization-types",
  "mina-signer",

@@ -1,5 +1,6 @@
 use std::{path::{Path, PathBuf}, io::Read};
 
+use lazy_static::lazy_static;
 use rocksdb::{ColumnFamilyDescriptor, DBWithThreadMode, MultiThreaded};
 use serde_derive::{Serialize, Deserialize};
 
@@ -7,6 +8,11 @@ use crate::{
     block::{precomputed::PrecomputedBlock, store::BlockStore, BlockHash},
     state::ledger::{store::LedgerStore, Ledger}, ROCKSDB_WRITE_BUFFER_SIZE, ROCKSDB_TARGET_FILE_SIZE, ROCKSDB_TUNING_CONFIG_FILE,
 };
+
+lazy_static! {
+    static ref ROCKSDB_TUNING_CONFIGURATION: RocksDBTuningConfiguration
+        = initialize_rocksdb_tuning_configuration();
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RocksDBTuningConfiguration {
@@ -60,8 +66,8 @@ impl IndexerStore {
         let mut database_opts = rocksdb::Options::default();
         database_opts.create_missing_column_families(true);
         database_opts.create_if_missing(true);
-        database_opts.set_write_buffer_size(ROCKSDB_WRITE_BUFFER_SIZE);
-        database_opts.set_target_file_size_base(ROCKSDB_TARGET_FILE_SIZE);
+        database_opts.set_write_buffer_size(ROCKSDB_TUNING_CONFIGURATION.write_buffer_size);
+        database_opts.set_target_file_size_base(ROCKSDB_TUNING_CONFIGURATION.target_file_size);
         let database = rocksdb::DBWithThreadMode::open_cf_descriptors(
             &database_opts,
             path,
