@@ -9,16 +9,18 @@ use crate::{
         IndexerMode, IndexerState,
     },
     store::IndexerStore,
-    MAINNET_GENESIS_HASH, MAINNET_TRANSITION_FRONTIER_K, PRUNE_INTERVAL_DEFAULT, SOCKET_NAME,
+    MAINNET_GENESIS_HASH, MAINNET_TRANSITION_FRONTIER_K, PRUNE_INTERVAL_DEFAULT, SOCKET_NAME, ROCKSDB_TARGET_FILE_SIZE, ROCKSDB_WRITE_BUFFER_SIZE,
 };
 use clap::Parser;
 use futures::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use futures_util::future::OptionFuture;
 use interprocess::local_socket::tokio::{LocalSocketListener, LocalSocketStream};
+use serde_derive::{Deserialize, Serialize};
 use std::{path::PathBuf, process, str::FromStr};
 use time::PrimitiveDateTime;
 use tokio::{
     fs::{self, create_dir_all, metadata},
-    time::Instant,
+    time::Instant, io::AsyncReadExt,
 };
 use tracing::{debug, error, info, instrument, level_filters::LevelFilter};
 use tracing_subscriber::prelude::*;
@@ -63,6 +65,8 @@ pub struct ServerArgs {
     /// Interval for pruning the root branch
     #[arg(short, long, default_value_t = PRUNE_INTERVAL_DEFAULT)]
     prune_interval: u32,
+    #[arg(long, default_value = None)]
+    rocksdb_tuning_config: Option<PathBuf>,
 }
 
 pub struct IndexerConfiguration {

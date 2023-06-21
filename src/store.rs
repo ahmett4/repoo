@@ -1,11 +1,35 @@
-use std::path::{Path, PathBuf};
+use std::{path::{Path, PathBuf}, io::Read};
 
 use rocksdb::{ColumnFamilyDescriptor, DBWithThreadMode, MultiThreaded};
+use serde_derive::{Serialize, Deserialize};
 
 use crate::{
     block::{precomputed::PrecomputedBlock, store::BlockStore, BlockHash},
-    state::ledger::{store::LedgerStore, Ledger}, ROCKSDB_WRITE_BUFFER_SIZE, ROCKSDB_TARGET_FILE_SIZE,
+    state::ledger::{store::LedgerStore, Ledger}, ROCKSDB_WRITE_BUFFER_SIZE, ROCKSDB_TARGET_FILE_SIZE, ROCKSDB_TUNING_CONFIG_FILE,
 };
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RocksDBTuningConfiguration {
+    target_file_size: u64,
+    write_buffer_size: usize,
+}
+
+pub fn initialize_rocksdb_tuning_configuration() -> RocksDBTuningConfiguration {
+    std::fs::File::open(ROCKSDB_TUNING_CONFIG_FILE).map_err(|e| anyhow::Error::from(e))
+        .and_then(|mut file| {
+            let mut contents = Vec::new();
+            file.read_to_end(&mut contents)?;
+            Ok(contents)
+        })
+        .and_then(|contents| {
+            let utf8 = String::from_utf8_lossy(&contents);
+            serde_yaml::from_str(&utf8).map_err(|e| anyhow::Error::from(e))
+        })
+        .unwrap_or(RocksDBTuningConfiguration {
+            target_file_size: ROCKSDB_TARGET_FILE_SIZE,
+            write_buffer_size: ROCKSDB_WRITE_BUFFER_SIZE,
+        })
+}
 
 #[derive(Debug)]
 pub struct IndexerStore {
