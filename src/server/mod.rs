@@ -106,7 +106,7 @@ pub async fn handle_command_line_arguments(
 
     assert!(
         // bad things happen if this condition fails
-        canonical_update_threshold < MAINNET_TRANSITION_FRONTIER_K,
+        canonical_update_threshold <= MAINNET_TRANSITION_FRONTIER_K,
         "canonical update threshold must be strictly less than the transition frontier length!"
     );
 
