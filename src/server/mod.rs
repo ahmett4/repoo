@@ -4,7 +4,7 @@ use crate::{
         store::BlockStore, BlockHash, BlockWithoutHeight,
     },
     state::{
-        ledger::{self, genesis::GenesisRoot, public_key::PublicKey, Ledger},
+        ledger::{self, genesis::GenesisRoot, public_key::PublicKey, Ledger, command::Command},
         summary::{SummaryShort, SummaryVerbose},
         IndexerMode, IndexerState,
     },
@@ -350,6 +350,26 @@ async fn handle_conn(
                 let bytes = bcs::to_bytes(&summary)?;
                 writer.write_all(&bytes).await?;
             }
+        }
+        "transactions" => {
+            let data_buffer = buffers.next().unwrap();
+            let public_key = PublicKey::from_address(&String::from_utf8(
+                data_buffer[..data_buffer.len() - 1].to_vec(),
+            )?)?;
+            info!("Received transactions command for {public_key:?}");
+            let mut account_commands: Vec<Command> = Vec::new();
+            for block_hash in best_chain {
+                let precomputed = db.get_block(&block_hash)?.expect("block hash in store");
+                let commands = Command::from_precomputed_block(&precomputed);
+                for command in commands {
+                    if command.origin() == public_key || command.target() == public_key {
+                        account_commands.push(command);
+                    }
+                }
+            }
+            debug!("Writing commands for public key {public_key:?} to client");
+            let bytes = bcs::to_bytes(&account_commands)?;
+            writer.write_all(&bytes).await?;
         }
         bad_request => {
             let err_msg = format!("Malformed request: {bad_request}");

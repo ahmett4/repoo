@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::block::precomputed::PrecomputedBlock;
 
+use super::public_key::PublicKey;
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum TransactionType {
     Payment,
@@ -32,6 +34,19 @@ pub enum Command {
 }
 
 impl Command {
+    pub fn origin(&self) -> PublicKey {
+        match self {
+            Command::Payment(payment) => PublicKey::from(payment.source.clone()),
+            Command::Delegation(delegation) => PublicKey::from(delegation.delegator.clone()),
+        }
+    }
+
+    pub fn target(&self) -> PublicKey {
+        match self {
+            Command::Payment(payment) => PublicKey::from(payment.receiver.clone()),
+            Command::Delegation(delegation) => PublicKey::from(delegation.delegate.clone())
+        }
+    }
     // i say i say now this is a thiccy
     pub fn from_precomputed_block(precomputed_block: &PrecomputedBlock) -> Vec<Self> {
         precomputed_block
