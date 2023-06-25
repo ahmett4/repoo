@@ -360,10 +360,12 @@ async fn handle_conn(
             let mut account_commands: Vec<Command> = Vec::new();
             for block_hash in best_chain {
                 let precomputed = db.get_block(&block_hash)?.expect("block hash in store");
-                let commands = Command::from_precomputed_block(&precomputed);
-                for command in commands {
-                    if command.origin() == public_key || command.target() == public_key {
-                        account_commands.push(command);
+                if precomputed.canonicity == Some(crate::state::Canonicity::Canonical) {
+                    let commands = Command::from_precomputed_block(&precomputed);
+                    for command in commands {
+                        if command.origin() == public_key || command.target() == public_key {
+                            account_commands.push(command);
+                        }
                     }
                 }
             }
