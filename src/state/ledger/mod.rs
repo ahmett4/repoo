@@ -97,24 +97,34 @@ impl Ledger {
             if let Some(account_before) = self.accounts.remove(&diff.public_key()) {
                 let account_after = match &diff {
                     diff::account::AccountDiff::Payment(payment_diff) => {
-                        match &payment_diff.update_type {
-                            diff::account::UpdateType::Deposit => {
-                                Account::from_deposit(account_before, payment_diff.amount)
-                            }
-                            diff::account::UpdateType::Deduction => {
-                                match Account::from_deduction(
-                                    account_before.clone(),
-                                    payment_diff.amount,
-                                ) {
-                                    Some(account) => account,
-                                    None => account_before,
-                                }
-                            }
+                        let deduction = match &payment_diff.update_type {
+                            diff::account::UpdateType::Deposit => false,
+                            diff::account::UpdateType::Deduction => true,
+                        };
+                        match Account::from_payment(
+                            account_before.clone(),
+                            payment_diff.amount,
+                            deduction
+                        ) {
+                            Some(account) => account,
+                            None => account_before,
                         }
                     }
                     diff::account::AccountDiff::Delegation(delegation_diff) => {
                         assert_eq!(account_before.public_key, delegation_diff.delegator);
                         Account::from_delegation(account_before, delegation_diff.delegate.clone())
+                    }
+                    diff::account::AccountDiff::Coinbase(coinbase_diff) =>
+                        Account::from_coinbase(account_before, coinbase_diff.amount),
+                    diff::account::AccountDiff::Fee(payment_diff) => {
+                        let deduction = match &payment_diff.update_type {
+                            diff::account::UpdateType::Deposit => false,
+                            diff::account::UpdateType::Deduction => true,
+                        };
+                        match Account::from_fee(account_before.clone(), payment_diff.amount, deduction) {
+                            Some(account) => account,
+                            None => account_before,
+                        }
                     }
                 };
                 self.accounts.insert(diff.public_key(), account_after);

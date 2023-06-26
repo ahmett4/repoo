@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use tokio::time::error::Elapsed;
 
 use super::PublicKey;
 
@@ -26,25 +27,48 @@ impl Account {
         }
     }
 
-    pub fn from_deduction(pre: Self, amount: u64) -> Option<Self> {
-        if amount > pre.balance.0 {
+    pub fn from_payment(pre: Self, amount: u64, deduction: bool) -> Option<Self> {
+        if deduction && amount > pre.balance.0 {
             None
         } else {
+            let balance = Amount(if deduction {
+                pre.balance.0 - amount
+            } else {
+                pre.balance.0 + amount
+            });
             Some(Account {
-                public_key: pre.public_key.clone(),
-                balance: Amount(pre.balance.0 - amount),
+                public_key: pre.public_key,
+                balance,
                 nonce: Nonce(pre.nonce.0 + 1),
                 delegate: pre.delegate,
             })
         }
     }
 
-    pub fn from_deposit(pre: Self, amount: u64) -> Self {
+    pub fn from_coinbase(pre: Self, amount: u64) -> Self {
         Account {
-            public_key: pre.public_key.clone(),
+            public_key: pre.public_key,
             balance: Amount(pre.balance.0 + amount),
-            nonce: Nonce(pre.nonce.0 + 1),
+            nonce: pre.nonce,
             delegate: pre.delegate,
+        }
+    }
+
+    pub fn from_fee(pre: Self, amount: u64, deduction: bool) -> Option<Self> {
+        if deduction && amount > pre.balance.0 {
+            None
+        } else {
+            let balance = Amount(if deduction {
+                pre.balance.0 - amount
+            } else {
+                pre.balance.0 + amount
+            });
+            Some(Account {
+                public_key: pre.public_key,
+                balance,
+                nonce: pre.nonce,
+                delegate: pre.delegate
+            })
         }
     }
 

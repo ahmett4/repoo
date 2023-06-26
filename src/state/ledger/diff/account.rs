@@ -33,6 +33,14 @@ pub struct DelegationDiff {
 pub enum AccountDiff {
     Payment(PaymentDiff),
     Delegation(DelegationDiff),
+    Coinbase(CoinbaseDiff),
+    Fee(PaymentDiff)
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize, Deserialize)]
+pub struct CoinbaseDiff {
+    pub public_key: PublicKey,
+    pub amount: u64,
 }
 
 impl AccountDiff {
@@ -62,17 +70,19 @@ impl AccountDiff {
             true => 1440,
             false => 720,
         } * (1e9 as u64);
-        AccountDiff::Payment(PaymentDiff {
+        AccountDiff::Coinbase(CoinbaseDiff {
             public_key: coinbase_receiver.into(),
             amount,
-            update_type: UpdateType::Deposit,
         })
     }
 
+    // TODO: Remove .clone() calls
     pub fn public_key(&self) -> PublicKey {
         match self {
             AccountDiff::Payment(payment_diff) => payment_diff.public_key.clone(),
             AccountDiff::Delegation(delegation_diff) => delegation_diff.delegator.clone(),
+            AccountDiff::Coinbase(coinbase_diff) => coinbase_diff.public_key.clone(),
+            AccountDiff::Fee(payment_diff) => payment_diff.public_key.clone(),
         }
     }
 
@@ -111,12 +121,12 @@ impl AccountDiff {
                             .inner()
                             .inner();
                         vec![
-                            AccountDiff::Payment(PaymentDiff {
+                            AccountDiff::Fee(PaymentDiff {
                                 public_key: fee_payer_pk.into(),
                                 amount: fee.clone().inner().inner(),
                                 update_type: UpdateType::Deduction,
                             }),
-                            AccountDiff::Payment(PaymentDiff {
+                            AccountDiff::Fee(PaymentDiff {
                                 public_key: coinbase_receiver.clone().into(),
                                 amount: fee.inner().inner(),
                                 update_type: UpdateType::Deposit,
@@ -150,6 +160,8 @@ impl std::fmt::Debug for AccountDiff {
         match self {
             AccountDiff::Payment(pay_diff) => write!(f, "Payment: {pay_diff:?}"),
             AccountDiff::Delegation(del_diff) => write!(f, "Delegation: {del_diff:?}"),
+            AccountDiff::Coinbase(coinbase_diff) => write!(f, "Coinbase: {coinbase_diff:?}"),
+            AccountDiff::Fee(payment_diff) => write!(f, "Fee: {payment_diff:?}"),
         }
     }
 }
