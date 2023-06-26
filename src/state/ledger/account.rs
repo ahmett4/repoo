@@ -75,7 +75,7 @@ impl Account {
         Account {
             public_key: pre.public_key,
             balance: pre.balance,
-            nonce: Nonce(pre.nonce.0 + 1),
+            nonce: Nonce(pre.nonce.0),
             delegate: Some(delegate),
         }
     }
