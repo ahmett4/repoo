@@ -60,45 +60,9 @@ async fn account_diffs() {
 
     println!("=== Account diffs ===");
     for x in diff.account_diffs {
-        match x {
-            AccountDiff::Payment(PaymentDiff {
-                public_key,
-                amount,
-                update_type,
-            }) => {
-                println!("\n* Payment");
-                println!("public_key:  {public_key:?}");
-                println!("amount:      {amount}");
-                println!("update_type: {update_type:?}");
-
-                match update_type {
-                    UpdateType::Deduction => {
-                        if let Some(balance) = ledger.get_mut(&public_key) {
-                            if amount as i64 > *balance {
-                                println!("deduction amount exceeded balance");
-                                panic!();
-                            }
-                            *balance -= amount as i64;
-                        }
-                    }
-                    UpdateType::Deposit => {
-                        if let Some(balance) = ledger.get_mut(&public_key) {
-                            *balance += amount as i64;
-                        } else {
-                            ledger.insert(public_key, amount as i64);
-                        }
-                    }
-                }
-            }
-            AccountDiff::Delegation(DelegationDiff {
-                delegate,
-                delegator,
-            }) => {
-                println!("\n* Delegation");
-                println!("delegate:  {delegate:?}");
-                println!("delegator: {delegator:?}");
-            }
-        }
+        match x {AccountDiff::Payment(PaymentDiff{public_key,amount,update_type,})=>{println!("\n* Payment");println!("public_key:  {public_key:?}");println!("amount:      {amount}");println!("update_type: {update_type:?}");match update_type{UpdateType::Deduction=>{if let Some(balance)=ledger.get_mut(&public_key){if amount as i64> *balance{println!("deduction amount exceeded balance");panic!();}*balance-=amount as i64;}}UpdateType::Deposit=>{if let Some(balance)=ledger.get_mut(&public_key) {*balance+=amount as i64;} else {ledger.insert(public_key,amount as i64);}}}}AccountDiff::Delegation(DelegationDiff{delegate,delegator,})=>{println!("\n* Delegation");println!("delegate:  {delegate:?}");println!("delegator: {delegator:?}");}
+        AccountDiff::Coinbase(_) => {},
+        AccountDiff::Fee(_) => {}, }
     }
 
     let delta: HashMap<PublicKey, i64> = HashMap::from([

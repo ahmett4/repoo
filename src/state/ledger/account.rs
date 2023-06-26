@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use tokio::time::error::Elapsed;
 
 use super::PublicKey;
 
