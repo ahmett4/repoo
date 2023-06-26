@@ -1,7 +1,7 @@
 use crate::{
     block::{precomputed::PrecomputedBlock, Block},
     state::{
-        ledger::account::Account,
+        ledger::{account::Account, command::Command},
         summary::{SummaryShort, SummaryVerbose},
     },
     SOCKET_NAME,
@@ -26,6 +26,7 @@ pub enum ClientCli {
     BestLedger(LedgerArgs),
     /// Show summary of indexer state
     Summary(SummaryArgs),
+    Transactions(AccountArgs)
 }
 
 #[derive(clap::Args, Debug)]
@@ -126,6 +127,13 @@ pub async fn run(command: &ClientCli) -> Result<(), anyhow::Error> {
                 let summary: SummaryShort = bcs::from_bytes(&buffer)?;
                 println!("{summary}");
             }
+        }
+        ClientCli::Transactions(account_args) => {
+            let command = format!("transactions {}\0", account_args.public_key);
+            writer.write_all(command.as_bytes()).await?;
+            reader.read_to_end(&mut buffer).await?;
+            let transactions: Vec<Command> = bcs::from_bytes(&buffer)?;
+            println!("{transactions:?}");
         }
     }
 
