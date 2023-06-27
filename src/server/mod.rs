@@ -361,9 +361,10 @@ async fn handle_conn(
             for block_hash in best_chain {
                 let precomputed = db.get_block(&block_hash)?.expect("block hash in store");
                 if precomputed.canonicity == Some(crate::state::Canonicity::Canonical) {
+                    debug!("using precomputed block {block_hash:?}");
                     let commands = Command::from_precomputed_block(&precomputed);
                     for command in commands {
-                        if command.origin() == public_key || command.target() == public_key {
+                        if command.references(&public_key) {
                             account_commands.push(command);
                         }
                     }

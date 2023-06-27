@@ -34,19 +34,21 @@ pub enum Command {
 }
 
 impl Command {
-    pub fn origin(&self) -> PublicKey {
+    pub fn references(&self, public_key: &PublicKey) -> bool {
         match self {
-            Command::Payment(payment) => PublicKey::from(payment.source.clone()),
-            Command::Delegation(delegation) => PublicKey::from(delegation.delegator.clone()),
+            Command::Payment(payment) => {
+                &PublicKey::from(payment.source.clone()) == public_key
+                    ||
+                &PublicKey::from(payment.receiver.clone()) == public_key
+            },
+            Command::Delegation(delegation) => {
+                &PublicKey::from(delegation.delegate.clone()) == public_key
+                    ||
+                &PublicKey::from(delegation.delegator.clone()) == public_key
+            }
         }
     }
 
-    pub fn target(&self) -> PublicKey {
-        match self {
-            Command::Payment(payment) => PublicKey::from(payment.receiver.clone()),
-            Command::Delegation(delegation) => PublicKey::from(delegation.delegate.clone())
-        }
-    }
     // i say i say now this is a thiccy
     pub fn from_precomputed_block(precomputed_block: &PrecomputedBlock) -> Vec<Self> {
         precomputed_block
