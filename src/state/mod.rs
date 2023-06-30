@@ -20,7 +20,7 @@ use id_tree::NodeId;
 use serde_derive::{Deserialize, Serialize};
 use std::{collections::HashMap, path::{Path, PathBuf}, str::FromStr, io::{Write, Read}};
 use time::{Duration, OffsetDateTime, PrimitiveDateTime};
-use tracing::{debug, info, trace, instrument};
+use tracing::{debug, info, trace, instrument, warn, error};
 
 pub mod branch;
 pub mod ledger;
@@ -260,16 +260,20 @@ impl IndexerState {
     pub fn to_indxr_file(&self, out_dir: impl AsRef<Path> + std::fmt::Debug) -> anyhow::Result<()> {
         let mut indxr_file_path = PathBuf::from(out_dir.as_ref());
         let mut compressed_bytes = Vec::new();
+        trace!("compressing IndexerState");
         self.compress(&mut compressed_bytes)?;
 
         let indexer_state_hash = blake3::hash(&compressed_bytes);
         indxr_file_path.push(indexer_state_hash.to_string());
         indxr_file_path.push(".indxr".to_string());
+        trace!("writing compressed IndexerState with hash {} to {}", indexer_state_hash, indxr_file_path.display());
 
         if std::fs::metadata(&indxr_file_path).is_err() {
             let mut file = std::fs::File::create(indxr_file_path)?;
             file.write_all(&compressed_bytes)?;
             drop(file)
+        } else {
+            warn!("indxr file {} already exists!", indxr_file_path.display());
         }
 
         Ok(())
@@ -283,12 +287,16 @@ impl IndexerState {
             .collect::<Vec<&str>>()
             .get(1)
         {
-            None => return Ok(None),
+            None => {
+                error!("indxr file path {} has wrong extension!", indxr_file_path.as_ref().display()); 
+                return Ok(None);
+            },
             Some(file_extension) => file_extension.to_string()
         };
 
         let mut indexer_state = None;
         if "indxr" == file_extension && std::fs::metadata(&indxr_file_path).is_ok() {
+            trace!("reading indxr file at path {}", indxr_file_path.as_ref().display());
             let file = std::fs::File::open(indxr_file_path)?;
             let deserialized_indexer_state = IndexerState::decompress(file)?;
             indexer_state = Some(deserialized_indexer_state);
