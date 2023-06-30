@@ -280,7 +280,7 @@ impl IndexerState {
     }
 
     #[instrument]
-    pub fn from_indxr_file(&self, indxr_file_path: impl AsRef<Path> + std::fmt::Debug) -> anyhow::Result<Option<Self>> {
+    pub fn from_indxr_file(indxr_file_path: impl AsRef<Path> + std::fmt::Debug) -> anyhow::Result<Option<Self>> {
         let file_extension = match indxr_file_path.as_ref()
             .to_string_lossy()
             .split('.')
