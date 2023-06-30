@@ -12,7 +12,7 @@ use futures::{
     AsyncReadExt,
 };
 use interprocess::local_socket::tokio::LocalSocketStream;
-use std::{path::{PathBuf, Path}, process};
+use std::{path::PathBuf, process};
 use tracing::instrument;
 
 #[derive(Parser, Debug)]
@@ -27,7 +27,7 @@ pub enum ClientCli {
     /// Show summary of indexer state
     Summary(SummaryArgs),
     /// Save the current IndexerState to an indxr file
-    SaveState { out_dir: PathBuf } ,
+    SaveState { out_dir: PathBuf },
 }
 
 #[derive(clap::Args, Debug)]

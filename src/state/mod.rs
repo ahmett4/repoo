@@ -13,26 +13,35 @@ use crate::{
         },
     },
     store::IndexerStore,
-    BLOCK_REPORTING_FREQ_NUM, BLOCK_REPORTING_FREQ_SEC, CANONICAL_UPDATE_THRESHOLD,
-    MAINNET_CANONICAL_THRESHOLD, MAINNET_TRANSITION_FRONTIER_K, PRUNE_INTERVAL_DEFAULT, AMAZON_ATHENA_DEFAULT_ZSTD_COMPRESSION_LEVEL,
+    AMAZON_ATHENA_DEFAULT_ZSTD_COMPRESSION_LEVEL, BLOCK_REPORTING_FREQ_NUM,
+    BLOCK_REPORTING_FREQ_SEC, CANONICAL_UPDATE_THRESHOLD, MAINNET_CANONICAL_THRESHOLD,
+    MAINNET_TRANSITION_FRONTIER_K, PRUNE_INTERVAL_DEFAULT,
 };
 use id_tree::NodeId;
-use rocksdb::backup::{BackupEngineOptions, BackupEngine, RestoreOptions};
-use serde::{Serializer, ser, Deserializer, de::{Visitor, SeqAccess}};
+use rocksdb::backup::{BackupEngine, BackupEngineOptions, RestoreOptions};
+use serde::{
+    de::{SeqAccess, Visitor},
+    ser, Deserializer, Serializer,
+};
 use serde_derive::{Deserialize, Serialize};
+use std::{
+    collections::HashMap,
+    io::{BufReader, Read, Write},
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 use tar::Archive;
-use std::{collections::HashMap, path::{Path, PathBuf}, str::FromStr, io::{Write, Read, BufReader}};
 use time::{Duration, OffsetDateTime, PrimitiveDateTime};
-use tracing::{debug, info, trace, instrument, warn, error};
+use tracing::{debug, error, info, instrument, trace, warn};
 
 pub mod branch;
 pub mod ledger;
 pub mod summary;
 
-pub fn serialize_store<S>(
-    store: &Option<IndexerStore>,
-    serializer: S
-) -> Result<S::Ok, S::Error> where S: Serializer {
+pub fn serialize_store<S>(store: &Option<IndexerStore>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
     match store {
         None => serializer.serialize_none(),
         Some(indexer_store) => {
@@ -42,7 +51,8 @@ pub fn serialize_store<S>(
                 let mut backup_engine = BackupEngine::open(&backup_opts, &backup_env)?;
                 backup_engine.create_new_backup_flush(indexer_store.db(), true)?;
                 let tarball_file = std::fs::File::create("./rocksdb_backup.tar.zst")?;
-                let mut encoder = zstd::Encoder::new(tarball_file, AMAZON_ATHENA_DEFAULT_ZSTD_COMPRESSION_LEVEL)?;
+                let encoder =
+                    zstd::Encoder::new(tarball_file, AMAZON_ATHENA_DEFAULT_ZSTD_COMPRESSION_LEVEL)?;
                 let mut tar = tar::Builder::new(encoder);
                 tar.append_dir("rocksdb_backup", "./rocksdb_backup")?;
                 let mut tarball_file = tar.into_inner()?.finish()?;
@@ -52,16 +62,17 @@ pub fn serialize_store<S>(
                     std::fs::remove_file("./rocksdb_backup.tar.zst")?
                 }
                 Ok(tarball_bytes)
-            })().map_err(|e: anyhow::Error| ser::Error::custom(e.to_string()))?;
+            })()
+            .map_err(|e: anyhow::Error| ser::Error::custom(e.to_string()))?;
             serializer.serialize_some(&backup_tarball)
         }
     }
 }
 
-
-pub fn deserialize_store<'de, D>(
-    deserializer: D,
-) -> Result<Option<IndexerStore>, D::Error> where D: Deserializer<'de> {
+pub fn deserialize_store<'de, D>(deserializer: D) -> Result<Option<IndexerStore>, D::Error>
+where
+    D: Deserializer<'de>,
+{
     struct IndexerStoreVisitor;
 
     impl<'de> Visitor<'de> for IndexerStoreVisitor {
@@ -71,23 +82,34 @@ pub fn deserialize_store<'de, D>(
             formatter.write_str("Option<IndexerStore>")
         }
 
-        fn visit_seq<V>(self, mut seq: V) -> Result<Option<IndexerStore>, V::Error> where V: SeqAccess<'de> {
+        fn visit_seq<V>(self, mut seq: V) -> Result<Option<IndexerStore>, V::Error>
+        where
+            V: SeqAccess<'de>,
+        {
             let option_bytes: Option<Vec<u8>> = seq
                 .next_element()?
                 .ok_or_else(|| serde::de::Error::invalid_length(0, &self))?;
 
-            option_bytes.map(|bytes| {
-                let reader = BufReader::new(bytes.as_slice());
-                let decoder = zstd::Decoder::new(reader)?;
-                let mut archive = Archive::new(decoder);
-                archive.unpack("./rocksdb_backup")?;
-                let backup_opts = BackupEngineOptions::new("./rocksdb_backup")?;
-                let backup_env = rocksdb::Env::new()?;
-                let mut backup_engine = BackupEngine::open(&backup_opts, &backup_env)?;
-                backup_engine.restore_from_latest_backup("./rocksdb", "./rocksdb", &RestoreOptions::default())?;
-                Ok(IndexerStore::new(&PathBuf::from("./rocksdb"))?)
-            }).map(|result| result.map_err(|e: anyhow::Error| serde::de::Error::custom(e.to_string())))
-            .map_or(Ok(None), |v| v.map(Some))
+            option_bytes
+                .map(|bytes| {
+                    let reader = BufReader::new(bytes.as_slice());
+                    let decoder = zstd::Decoder::new(reader)?;
+                    let mut archive = Archive::new(decoder);
+                    archive.unpack("./rocksdb_backup")?;
+                    let backup_opts = BackupEngineOptions::new("./rocksdb_backup")?;
+                    let backup_env = rocksdb::Env::new()?;
+                    let mut backup_engine = BackupEngine::open(&backup_opts, &backup_env)?;
+                    backup_engine.restore_from_latest_backup(
+                        "./rocksdb",
+                        "./rocksdb",
+                        &RestoreOptions::default(),
+                    )?;
+                    IndexerStore::new(&PathBuf::from("./rocksdb"))
+                })
+                .map(|result| {
+                    result.map_err(|e: anyhow::Error| serde::de::Error::custom(e.to_string()))
+                })
+                .map_or(Ok(None), |v| v.map(Some))
         }
     }
     deserializer.deserialize_option(IndexerStoreVisitor)
@@ -334,8 +356,12 @@ impl IndexerState {
 
         let indexer_state_hash = blake3::hash(&compressed_bytes);
         indxr_file_path.push(indexer_state_hash.to_string());
-        indxr_file_path.push(".indxr".to_string());
-        trace!("writing compressed IndexerState with hash {} to {}", indexer_state_hash, indxr_file_path.display());
+        indxr_file_path.push(".indxr");
+        trace!(
+            "writing compressed IndexerState with hash {} to {}",
+            indexer_state_hash,
+            indxr_file_path.display()
+        );
 
         if std::fs::metadata(&indxr_file_path).is_err() {
             let mut file = std::fs::File::create(indxr_file_path)?;
@@ -349,23 +375,32 @@ impl IndexerState {
     }
 
     #[instrument]
-    pub fn from_indxr_file(indxr_file_path: impl AsRef<Path> + std::fmt::Debug) -> anyhow::Result<Option<Self>> {
-        let file_extension = match indxr_file_path.as_ref()
+    pub fn from_indxr_file(
+        indxr_file_path: impl AsRef<Path> + std::fmt::Debug,
+    ) -> anyhow::Result<Option<Self>> {
+        let file_extension = match indxr_file_path
+            .as_ref()
             .to_string_lossy()
             .split('.')
             .collect::<Vec<&str>>()
             .get(1)
         {
             None => {
-                error!("indxr file path {} has wrong extension!", indxr_file_path.as_ref().display()); 
+                error!(
+                    "indxr file path {} has wrong extension!",
+                    indxr_file_path.as_ref().display()
+                );
                 return Ok(None);
-            },
-            Some(file_extension) => file_extension.to_string()
+            }
+            Some(file_extension) => file_extension.to_string(),
         };
 
         let mut indexer_state = None;
         if "indxr" == file_extension && std::fs::metadata(&indxr_file_path).is_ok() {
-            trace!("reading indxr file at path {}", indxr_file_path.as_ref().display());
+            trace!(
+                "reading indxr file at path {}",
+                indxr_file_path.as_ref().display()
+            );
             let file = std::fs::File::open(indxr_file_path)?;
             let deserialized_indexer_state = IndexerState::decompress(file)?;
             indexer_state = Some(deserialized_indexer_state);
@@ -376,9 +411,7 @@ impl IndexerState {
 
     #[instrument]
     pub fn compress(&self, out: impl std::io::Write + std::fmt::Debug) -> anyhow::Result<()> {
-        let mut encoder = zstd::Encoder::new(out, 
-            AMAZON_ATHENA_DEFAULT_ZSTD_COMPRESSION_LEVEL
-        )?;
+        let mut encoder = zstd::Encoder::new(out, AMAZON_ATHENA_DEFAULT_ZSTD_COMPRESSION_LEVEL)?;
 
         let bytes = bcs::to_bytes(self)?;
         trace!("compressing {} bytes for IndexerState", bytes.len());

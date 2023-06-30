@@ -3,12 +3,13 @@ use crate::{
     state::{
         ledger::{store::LedgerStore, Ledger},
         Canonicity,
-    }, 
+    },
 };
 use mina_serialization_types::{staged_ledger_diff::UserCommand, v1::UserCommandWithStatusV1};
-use rocksdb::{ColumnFamilyDescriptor, DBWithThreadMode, MultiThreaded, };
+use rocksdb::{ColumnFamilyDescriptor, DBWithThreadMode, MultiThreaded};
 use std::{
-    marker::PhantomData, path::{PathBuf, Path},
+    marker::PhantomData,
+    path::{Path, PathBuf},
 };
 
 /// Storage Key

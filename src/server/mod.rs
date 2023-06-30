@@ -16,9 +16,12 @@ use clap::Parser;
 use futures::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use interprocess::local_socket::tokio::{LocalSocketListener, LocalSocketStream};
 use log::trace;
-use serde_derive::{Serialize, Deserialize};
+use serde_derive::{Deserialize, Serialize};
 use std::{path::PathBuf, process, sync::Arc};
-use tokio::{fs::{self, create_dir_all, metadata}, sync::{mpsc::{Sender, Receiver}, watch}};
+use tokio::{
+    fs::{self, create_dir_all, metadata},
+    sync::mpsc::Sender,
+};
 use tracing::{debug, error, info, instrument, level_filters::LevelFilter};
 use tracing_subscriber::prelude::*;
 use uuid::Uuid;
@@ -206,7 +209,7 @@ pub async fn run(args: ServerArgs) -> Result<(), anyhow::Error> {
     let mut indexer_state = if let Some(indxr_file_path) = &indxr_file_path {
         match IndexerState::from_indxr_file(indxr_file_path)? {
             None => process::exit(100),
-            Some(indexer_state) => indexer_state
+            Some(indexer_state) => indexer_state,
         }
     } else {
         info!(
@@ -380,7 +383,9 @@ async fn handle_conn(
         "save_state" => {
             info!("Received save_state command");
             let data_buffer = buffers.next().unwrap();
-            let indxr_file_path = PathBuf::from(String::from_utf8(data_buffer[..data_buffer.len() - 1].to_vec())?);
+            let indxr_file_path = PathBuf::from(String::from_utf8(
+                data_buffer[..data_buffer.len() - 1].to_vec(),
+            )?);
             save_tx.send(SaveCommand(indxr_file_path)).await?;
             // while !save_resp_rx.has_changed()? {}
             if let Some(resp) = save_resp_rx.recv()? {
