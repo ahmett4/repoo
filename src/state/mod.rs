@@ -22,15 +22,15 @@ use std::{
     collections::HashMap,
     path::Path,
     str::FromStr,
-    time::{Duration, Instant},
 };
-use time::{OffsetDateTime, PrimitiveDateTime};
+use time::{OffsetDateTime, PrimitiveDateTime, Duration};
 use tracing::{debug, info};
 
 pub mod branch;
 pub mod ledger;
 pub mod summary;
 
+#[derive(Serialize, Deserialize)]
 /// Rooted forest of precomputed block summaries aka the witness tree
 /// `root_branch` - represents the tree of blocks connecting back to a known ledger state, e.g. genesis
 /// `dangling_branches` - trees of blocks stemming from an unknown ledger state
@@ -60,19 +60,17 @@ pub struct IndexerState {
     pub canonical_update_threshold: u32,
     /// Number of blocks added to the state
     pub blocks_processed: u32,
-    /// Time the indexer started running
-    pub time: Instant,
     /// Datetime the indexer started running
-    pub date_time: OffsetDateTime,
+    pub init_time: OffsetDateTime,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Tip {
     pub state_hash: BlockHash,
     pub node_id: NodeId,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, clap::ValueEnum, Serialize, Deserialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum IndexerPhase {
     InitializingFromBlockDir,
     InitializingFromDB,
@@ -80,7 +78,7 @@ pub enum IndexerPhase {
     Testing,
 }
 
-#[derive(Debug, Clone, clap::ValueEnum)]
+#[derive(Debug, Copy, Clone, clap::ValueEnum, Serialize, Deserialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum IndexerMode {
     Light,
     Full,
@@ -147,8 +145,7 @@ impl IndexerState {
             prune_interval,
             canonical_update_threshold,
             blocks_processed: 0,
-            time: Instant::now(),
-            date_time: OffsetDateTime::now_utc(),
+            init_time: OffsetDateTime::now_utc(),
         })
     }
 
@@ -195,8 +192,7 @@ impl IndexerState {
             prune_interval,
             canonical_update_threshold,
             blocks_processed: 0,
-            time: Instant::now(),
-            date_time: OffsetDateTime::now_utc(),
+            init_time: OffsetDateTime::now_utc(),
         })
     }
 
@@ -236,8 +232,7 @@ impl IndexerState {
             prune_interval: PRUNE_INTERVAL_DEFAULT,
             canonical_update_threshold: CANONICAL_UPDATE_THRESHOLD,
             blocks_processed: 0,
-            time: Instant::now(),
-            date_time: OffsetDateTime::now_utc(),
+            init_time: OffsetDateTime::now_utc(),
         })
     }
 
@@ -374,18 +369,19 @@ impl IndexerState {
             let mut ledger = indexer_store
                 .get_ledger(&self.canonical_tip.state_hash)?
                 .unwrap();
-            let total_time = Instant::now();
+            let total_time = OffsetDateTime::now_utc();
 
             info!("Reporting every {BLOCK_REPORTING_FREQ_NUM} blocks");
             while block_count < block_parser.num_canonical {
                 block_count += 1;
 
                 if should_report_from_block_count(block_count) {
-                    let rate = block_count as f64 / total_time.elapsed().as_secs() as f64;
+                    let elapsed = OffsetDateTime::now_utc() - total_time;
+                    let rate = block_count as f64 / elapsed.as_seconds_f64();
 
                     info!(
                         "{block_count} blocks parsed and applied in {:?}",
-                        total_time.elapsed()
+                        elapsed
                     );
                     info!(
                         "Estimated time: {} min",
@@ -452,8 +448,9 @@ impl IndexerState {
         blocks_processed: u32,
     ) -> anyhow::Result<()> {
         let mut block_count = blocks_processed;
-        let total_time = Instant::now();
-        let mut step_time = total_time;
+        let init_time = OffsetDateTime::now_utc();
+        let mut now = init_time;
+        let elapsed = now - init_time;
 
         if blocks_processed == 0 {
             info!(
@@ -462,17 +459,17 @@ impl IndexerState {
         }
         while let Some(block) = block_parser.next().await? {
             if should_report_from_block_count(block_count)
-                || self.should_report_from_time(step_time.elapsed())
+                || self.should_report_from_time(elapsed)
             {
-                step_time = Instant::now();
+                now = OffsetDateTime::now_utc();
 
                 let best_tip: BlockWithoutHeight = self.best_tip_block().clone().into();
                 let canonical_tip: BlockWithoutHeight = self.canonical_tip_block().clone().into();
-                let rate = block_count as f64 / total_time.elapsed().as_secs() as f64;
+                let rate = block_count as f64 / elapsed.as_seconds_f64() as f64;
 
                 info!(
                     "Parsed and added {block_count} blocks to the witness tree in {:?}",
-                    total_time.elapsed()
+                    elapsed
                 );
 
                 debug!("Root height:       {}", self.root_branch.height());
@@ -493,7 +490,7 @@ impl IndexerState {
 
         info!(
             "Ingested {block_count} blocks in {:?}",
-            total_time.elapsed()
+            elapsed
         );
 
         debug!("Phase change: {} -> {}", self.phase, IndexerPhase::Watching);
@@ -895,8 +892,8 @@ impl IndexerState {
         };
 
         SummaryShort {
-            uptime: self.time.clone().elapsed(),
-            date_time: PrimitiveDateTime::new(self.date_time.date(), self.date_time.time()),
+            uptime: OffsetDateTime::now_utc() - self.init_time,
+            date_time: PrimitiveDateTime::new(self.init_time.date(), self.init_time.time()),
             blocks_processed: self.blocks_processed,
             witness_tree,
             db_stats: db_stats_str.map(|s| DbStats::from_str(&format!("{mem}\n{s}")).unwrap()),
@@ -938,8 +935,8 @@ impl IndexerState {
         };
 
         SummaryVerbose {
-            uptime: self.time.clone().elapsed(),
-            date_time: PrimitiveDateTime::new(self.date_time.date(), self.date_time.time()),
+            uptime: OffsetDateTime::now_utc() - self.init_time,
+            date_time: PrimitiveDateTime::new(self.init_time.date(), self.init_time.time()),
             blocks_processed: self.blocks_processed,
             witness_tree,
             db_stats: db_stats_str.map(|s| DbStats::from_str(&format!("{mem}\n{s}")).unwrap()),
@@ -952,10 +949,10 @@ impl IndexerState {
     }
 
     fn should_report_from_time(&self, duration: Duration) -> bool {
-        self.is_initializing() && duration.as_secs() > BLOCK_REPORTING_FREQ_SEC
+        self.is_initializing() && duration.as_seconds_f32() > BLOCK_REPORTING_FREQ_SEC as f32
     }
 }
-
+ 
 /// Checks if the block is the parent of the branch's root
 fn is_reverse_extension(branch: &Branch, precomputed_block: &PrecomputedBlock) -> bool {
     precomputed_block.state_hash == branch.root_block().parent_hash.0

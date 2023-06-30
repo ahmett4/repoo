@@ -28,7 +28,7 @@ pub struct BlockWithoutHeight {
     pub global_slot_since_genesis: u32,
 }
 
-#[derive(Hash, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BlockHash(pub String);
 
 impl BlockHash {
