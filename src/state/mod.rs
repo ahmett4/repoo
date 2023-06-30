@@ -14,13 +14,13 @@ use crate::{
     },
     store::IndexerStore,
     BLOCK_REPORTING_FREQ_NUM, BLOCK_REPORTING_FREQ_SEC, CANONICAL_UPDATE_THRESHOLD,
-    MAINNET_CANONICAL_THRESHOLD, MAINNET_TRANSITION_FRONTIER_K, PRUNE_INTERVAL_DEFAULT,
+    MAINNET_CANONICAL_THRESHOLD, MAINNET_TRANSITION_FRONTIER_K, PRUNE_INTERVAL_DEFAULT, AMAZON_ATHENA_DEFAULT_ZSTD_COMPRESSION_LEVEL,
 };
 use id_tree::NodeId;
 use serde_derive::{Deserialize, Serialize};
-use std::{collections::HashMap, path::Path, str::FromStr};
+use std::{collections::HashMap, path::{Path, PathBuf}, str::FromStr, io::{Write, Read}};
 use time::{Duration, OffsetDateTime, PrimitiveDateTime};
-use tracing::{debug, info};
+use tracing::{debug, info, trace, instrument};
 
 pub mod branch;
 pub mod ledger;
@@ -254,6 +254,73 @@ impl IndexerState {
             blocks_processed: 0,
             init_time: OffsetDateTime::now_utc(),
         })
+    }
+
+    #[instrument]
+    pub fn to_indxr_file(&self, out_dir: impl AsRef<Path> + std::fmt::Debug) -> anyhow::Result<()> {
+        let mut indxr_file_path = PathBuf::from(out_dir.as_ref());
+        let mut compressed_bytes = Vec::new();
+        self.compress(&mut compressed_bytes)?;
+
+        let indexer_state_hash = blake3::hash(&compressed_bytes);
+        indxr_file_path.push(indexer_state_hash.to_string());
+        indxr_file_path.push(".indxr".to_string());
+
+        if std::fs::metadata(&indxr_file_path).is_err() {
+            let mut file = std::fs::File::create(indxr_file_path)?;
+            file.write_all(&compressed_bytes)?;
+            drop(file)
+        }
+
+        Ok(())
+    }
+
+    #[instrument]
+    pub fn from_indxr_file(&self, indxr_file_path: impl AsRef<Path> + std::fmt::Debug) -> anyhow::Result<Option<Self>> {
+        let file_extension = match indxr_file_path.as_ref()
+            .to_string_lossy()
+            .split('.')
+            .collect::<Vec<&str>>()
+            .get(1)
+        {
+            None => return Ok(None),
+            Some(file_extension) => file_extension.to_string()
+        };
+
+        let mut indexer_state = None;
+        if "indxr" == file_extension && std::fs::metadata(&indxr_file_path).is_ok() {
+            let file = std::fs::File::open(indxr_file_path)?;
+            let deserialized_indexer_state = IndexerState::decompress(file)?;
+            indexer_state = Some(deserialized_indexer_state);
+        }
+
+        Ok(indexer_state)
+    }
+
+    #[instrument]
+    pub fn compress(&self, out: impl std::io::Write + std::fmt::Debug) -> anyhow::Result<()> {
+        let mut encoder = zstd::Encoder::new(out, 
+            AMAZON_ATHENA_DEFAULT_ZSTD_COMPRESSION_LEVEL
+        )?;
+
+        let bytes = bcs::to_bytes(self)?;
+        trace!("compressing {} bytes for IndexerState", bytes.len());
+        encoder.write_all(&bytes)?;
+        encoder.finish()?;
+
+        Ok(())
+    }
+
+    #[instrument]
+    pub fn decompress(input: impl std::io::Read + std::fmt::Debug) -> anyhow::Result<Self> {
+        let mut decoder = zstd::Decoder::new(input)?;
+        let mut bytes = Vec::new();
+        let bytes_read = decoder.read_to_end(&mut bytes)?;
+        let _reader = decoder.finish();
+        trace!("decompressed {} bytes into IndexerState", bytes_read);
+
+        let indexer_state: IndexerState = bcs::from_bytes(&bytes)?;
+        Ok(indexer_state)
     }
 
     /// Creates a new indexer state from a db instance
