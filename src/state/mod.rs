@@ -449,8 +449,7 @@ impl IndexerState {
     ) -> anyhow::Result<()> {
         let mut block_count = blocks_processed;
         let init_time = OffsetDateTime::now_utc();
-        let mut now = init_time;
-        let elapsed = now - init_time;
+        let elapsed = OffsetDateTime::now_utc() - init_time;
 
         if blocks_processed == 0 {
             info!(
@@ -461,8 +460,6 @@ impl IndexerState {
             if should_report_from_block_count(block_count)
                 || self.should_report_from_time(elapsed)
             {
-                now = OffsetDateTime::now_utc();
-
                 let best_tip: BlockWithoutHeight = self.best_tip_block().clone().into();
                 let canonical_tip: BlockWithoutHeight = self.canonical_tip_block().clone().into();
                 let rate = block_count as f64 / elapsed.as_seconds_f64() as f64;
