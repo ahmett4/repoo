@@ -18,12 +18,8 @@ use crate::{
 };
 use id_tree::NodeId;
 use serde_derive::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    path::Path,
-    str::FromStr,
-};
-use time::{OffsetDateTime, PrimitiveDateTime, Duration};
+use std::{collections::HashMap, path::Path, str::FromStr};
+use time::{Duration, OffsetDateTime, PrimitiveDateTime};
 use tracing::{debug, info};
 
 pub mod branch;
@@ -70,7 +66,19 @@ pub struct Tip {
     pub node_id: NodeId,
 }
 
-#[derive(Debug, Copy, Clone, clap::ValueEnum, Serialize, Deserialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    clap::ValueEnum,
+    Serialize,
+    Deserialize,
+    Hash,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
 pub enum IndexerPhase {
     InitializingFromBlockDir,
     InitializingFromDB,
@@ -78,7 +86,19 @@ pub enum IndexerPhase {
     Testing,
 }
 
-#[derive(Debug, Copy, Clone, clap::ValueEnum, Serialize, Deserialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    clap::ValueEnum,
+    Serialize,
+    Deserialize,
+    Hash,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
 pub enum IndexerMode {
     Light,
     Full,
@@ -379,10 +399,7 @@ impl IndexerState {
                     let elapsed = OffsetDateTime::now_utc() - total_time;
                     let rate = block_count as f64 / elapsed.as_seconds_f64();
 
-                    info!(
-                        "{block_count} blocks parsed and applied in {:?}",
-                        elapsed
-                    );
+                    info!("{block_count} blocks parsed and applied in {:?}", elapsed);
                     info!(
                         "Estimated time: {} min",
                         (block_parser.total_num_blocks - block_count) as f64 / (rate * 60_f64)
@@ -457,12 +474,11 @@ impl IndexerState {
             );
         }
         while let Some(block) = block_parser.next().await? {
-            if should_report_from_block_count(block_count)
-                || self.should_report_from_time(elapsed)
+            if should_report_from_block_count(block_count) || self.should_report_from_time(elapsed)
             {
                 let best_tip: BlockWithoutHeight = self.best_tip_block().clone().into();
                 let canonical_tip: BlockWithoutHeight = self.canonical_tip_block().clone().into();
-                let rate = block_count as f64 / elapsed.as_seconds_f64() as f64;
+                let rate = block_count as f64 / elapsed.as_seconds_f64();
 
                 info!(
                     "Parsed and added {block_count} blocks to the witness tree in {:?}",
@@ -485,10 +501,7 @@ impl IndexerState {
             block_count += 1;
         }
 
-        info!(
-            "Ingested {block_count} blocks in {:?}",
-            elapsed
-        );
+        info!("Ingested {block_count} blocks in {:?}", elapsed);
 
         debug!("Phase change: {} -> {}", self.phase, IndexerPhase::Watching);
         self.phase = IndexerPhase::Watching;
@@ -949,7 +962,7 @@ impl IndexerState {
         self.is_initializing() && duration.as_seconds_f32() > BLOCK_REPORTING_FREQ_SEC as f32
     }
 }
- 
+
 /// Checks if the block is the parent of the branch's root
 fn is_reverse_extension(branch: &Branch, precomputed_block: &PrecomputedBlock) -> bool {
     precomputed_block.state_hash == branch.root_block().parent_hash.0

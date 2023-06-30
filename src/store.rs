@@ -7,11 +7,17 @@ use crate::{
 };
 use mina_serialization_types::{staged_ledger_diff::UserCommand, v1::UserCommandWithStatusV1};
 use rocksdb::{ColumnFamilyDescriptor, DBWithThreadMode, MultiThreaded};
-use serde::{self, Deserializer, Serializer, ser::SerializeStruct, de::{Visitor, SeqAccess, self}};
-use serde_derive::{Serialize, Deserialize};
+use serde::{
+    self,
+    de::{self, SeqAccess, Visitor},
+    ser::SerializeStruct,
+    Deserializer, Serializer,
+};
+use serde_derive::{Deserialize, Serialize};
 use std::{
+    fmt,
     marker::PhantomData,
-    path::{Path, PathBuf}, fmt,
+    path::{Path, PathBuf},
 };
 
 /// Storage Key
@@ -40,13 +46,24 @@ impl Key<Transaction> {
     }
 }
 
-pub fn serialize_database<S>(db: &DBWithThreadMode<MultiThreaded>, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+pub fn serialize_database<S>(
+    db: &DBWithThreadMode<MultiThreaded>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
     let mut state = serializer.serialize_struct("MultiThreadedRocksDB", 1)?;
     state.serialize_field("path", &db.path().display().to_string())?;
     state.end()
 }
 
-pub fn deserialize_database<'de, D>(deserializer: D) -> Result<DBWithThreadMode<MultiThreaded>, D::Error> where D: Deserializer<'de> {
+pub fn deserialize_database<'de, D>(
+    deserializer: D,
+) -> Result<DBWithThreadMode<MultiThreaded>, D::Error>
+where
+    D: Deserializer<'de>,
+{
     struct DatabaseVisitor;
 
     impl<'de> Visitor<'de> for DatabaseVisitor {
@@ -56,8 +73,12 @@ pub fn deserialize_database<'de, D>(deserializer: D) -> Result<DBWithThreadMode<
             formatter.write_str("struct DBWithTreadMode<MultiThreaded>")
         }
 
-        fn visit_seq<V>(self, mut seq: V) -> Result<DBWithThreadMode<MultiThreaded>, V::Error> where V: SeqAccess<'de> {
-            let path: String = seq.next_element()?
+        fn visit_seq<V>(self, mut seq: V) -> Result<DBWithThreadMode<MultiThreaded>, V::Error>
+        where
+            V: SeqAccess<'de>,
+        {
+            let path: String = seq
+                .next_element()?
                 .ok_or_else(|| de::Error::invalid_length(0, &self))?;
 
             let mut cf_opts = rocksdb::Options::default();
@@ -74,18 +95,19 @@ pub fn deserialize_database<'de, D>(deserializer: D) -> Result<DBWithThreadMode<
                 &database_opts,
                 path,
                 vec![blocks, ledgers, canonicity, tx],
-            ).map_err(|e| de::Error::custom(e.to_string()))?;
+            )
+            .map_err(|e| de::Error::custom(e.to_string()))?;
 
             Ok(database)
         }
     }
 
-    const FIELDS: &'static [&'static str] = &["path"];
+    const FIELDS: &[&str] = &["path"];
     deserializer.deserialize_struct("MultiThreadedRocksDB", FIELDS, DatabaseVisitor)
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct IndexerStore{
+pub struct IndexerStore {
     db_path: PathBuf,
     #[serde(serialize_with = "serialize_database")]
     #[serde(deserialize_with = "deserialize_database")]

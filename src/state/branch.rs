@@ -15,7 +15,6 @@ pub struct Branch {
     pub branches: Tree<Block>,
 }
 
-
 impl Branch {
     pub fn new_genesis(root_hash: BlockHash) -> Self {
         let genesis_block = Block {
