@@ -16,8 +16,9 @@ use clap::Parser;
 use futures::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use interprocess::local_socket::tokio::{LocalSocketListener, LocalSocketStream};
 use log::trace;
-use std::{path::PathBuf, process};
-use tokio::fs::{self, create_dir_all, metadata};
+use serde_derive::{Serialize, Deserialize};
+use std::{path::PathBuf, process, sync::Arc};
+use tokio::{fs::{self, create_dir_all, metadata}, sync::{mpsc::{Sender, Receiver}, watch}};
 use tracing::{debug, error, info, instrument, level_filters::LevelFilter};
 use tracing_subscriber::prelude::*;
 use uuid::Uuid;
@@ -84,6 +85,11 @@ pub struct IndexerConfiguration {
     prune_interval: u32,
     canonical_update_threshold: u32,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SaveCommand(PathBuf);
+#[derive(Debug, Serialize, Deserialize)]
+struct SaveResponse(String);
 
 #[instrument(skip_all)]
 pub async fn handle_command_line_arguments(
@@ -238,6 +244,11 @@ pub async fn run(args: ServerArgs) -> Result<(), anyhow::Error> {
     let listener = LocalSocketListener::bind(SOCKET_NAME)?;
     info!("Local socket listener started");
 
+    let (save_tx, mut save_rx) = tokio::sync::mpsc::channel(1);
+    let (mut save_resp_tx, save_resp_rx) = spmc::channel();
+    let save_tx = Arc::new(save_tx);
+    let save_resp_rx = Arc::new(save_resp_rx);
+
     loop {
         tokio::select! {
             block_fut = block_receiver.recv() => {
@@ -268,16 +279,27 @@ pub async fn run(args: ServerArgs) -> Result<(), anyhow::Error> {
                 let summary = indexer_state.summary_verbose();
                 let ledger = indexer_state.best_ledger()?.unwrap();
 
+                let save_tx = save_tx.clone();
+                let save_resp_rx = save_resp_rx.clone();
                 // handle the connection
                 tokio::spawn(async move {
                     debug!("Handling connection");
-                    if let Err(e) = handle_conn(conn, block_store_readonly, best_chain, ledger, summary).await {
+                    if let Err(e) = handle_conn(conn, block_store_readonly, best_chain, ledger, summary, save_tx, save_resp_rx).await {
                         error!("Error handling connection: {e}");
                     }
 
                     debug!("Removing readonly instance at {}", secondary_path.display());
                     tokio::fs::remove_dir_all(&secondary_path).await.ok();
                 });
+            }
+
+            save_rx_fut = save_rx.recv() => {
+                if let Some(SaveCommand(indxr_file_path)) = save_rx_fut {
+                    match indexer_state.to_indxr_file(&indxr_file_path) {
+                        Ok(_) => save_resp_tx.send(Some(SaveResponse("indxr file created".to_string())))?,
+                        Err(e) => save_resp_tx.send(Some(SaveResponse(e.to_string())))?,
+                    }
+                }
             }
         }
     }
@@ -290,6 +312,8 @@ async fn handle_conn(
     best_chain: Vec<BlockHash>,
     ledger: Ledger,
     summary: SummaryVerbose,
+    save_tx: Arc<Sender<SaveCommand>>,
+    save_resp_rx: Arc<spmc::Receiver<Option<SaveResponse>>>,
 ) -> Result<(), anyhow::Error> {
     let (reader, mut writer) = conn.into_split();
     let mut reader = BufReader::new(reader);
@@ -350,6 +374,17 @@ async fn handle_conn(
             } else {
                 let summary: SummaryShort = summary.into();
                 let bytes = bcs::to_bytes(&summary)?;
+                writer.write_all(&bytes).await?;
+            }
+        }
+        "save_state" => {
+            info!("Received save_state command");
+            let data_buffer = buffers.next().unwrap();
+            let indxr_file_path = PathBuf::from(String::from_utf8(data_buffer[..data_buffer.len() - 1].to_vec())?);
+            save_tx.send(SaveCommand(indxr_file_path)).await?;
+            // while !save_resp_rx.has_changed()? {}
+            if let Some(resp) = save_resp_rx.recv()? {
+                let bytes = bcs::to_bytes(&resp)?;
                 writer.write_all(&bytes).await?;
             }
         }

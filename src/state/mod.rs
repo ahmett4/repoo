@@ -17,14 +17,81 @@ use crate::{
     MAINNET_CANONICAL_THRESHOLD, MAINNET_TRANSITION_FRONTIER_K, PRUNE_INTERVAL_DEFAULT, AMAZON_ATHENA_DEFAULT_ZSTD_COMPRESSION_LEVEL,
 };
 use id_tree::NodeId;
+use rocksdb::backup::{BackupEngineOptions, BackupEngine, RestoreOptions};
+use serde::{Serializer, ser, Deserializer, de::{Visitor, SeqAccess}};
 use serde_derive::{Deserialize, Serialize};
-use std::{collections::HashMap, path::{Path, PathBuf}, str::FromStr, io::{Write, Read}};
+use tar::Archive;
+use std::{collections::HashMap, path::{Path, PathBuf}, str::FromStr, io::{Write, Read, BufReader}};
 use time::{Duration, OffsetDateTime, PrimitiveDateTime};
 use tracing::{debug, info, trace, instrument, warn, error};
 
 pub mod branch;
 pub mod ledger;
 pub mod summary;
+
+pub fn serialize_store<S>(
+    store: &Option<IndexerStore>,
+    serializer: S
+) -> Result<S::Ok, S::Error> where S: Serializer {
+    match store {
+        None => serializer.serialize_none(),
+        Some(indexer_store) => {
+            let backup_tarball = (move || {
+                let backup_opts = BackupEngineOptions::new("./rocksdb_backup")?;
+                let backup_env = rocksdb::Env::new()?;
+                let mut backup_engine = BackupEngine::open(&backup_opts, &backup_env)?;
+                backup_engine.create_new_backup_flush(indexer_store.db(), true)?;
+                let tarball_file = std::fs::File::create("./rocksdb_backup.tar.zst")?;
+                let mut encoder = zstd::Encoder::new(tarball_file, AMAZON_ATHENA_DEFAULT_ZSTD_COMPRESSION_LEVEL)?;
+                let mut tar = tar::Builder::new(encoder);
+                tar.append_dir("rocksdb_backup", "./rocksdb_backup")?;
+                let mut tarball_file = tar.into_inner()?.finish()?;
+                let mut tarball_bytes = Vec::new();
+                tarball_file.read_to_end(&mut tarball_bytes)?;
+                if std::fs::metadata("./rocksdb_backup.tar.zst").is_ok() {
+                    std::fs::remove_file("./rocksdb_backup.tar.zst")?
+                }
+                Ok(tarball_bytes)
+            })().map_err(|e: anyhow::Error| ser::Error::custom(e.to_string()))?;
+            serializer.serialize_some(&backup_tarball)
+        }
+    }
+}
+
+
+pub fn deserialize_store<'de, D>(
+    deserializer: D,
+) -> Result<Option<IndexerStore>, D::Error> where D: Deserializer<'de> {
+    struct IndexerStoreVisitor;
+
+    impl<'de> Visitor<'de> for IndexerStoreVisitor {
+        type Value = Option<IndexerStore>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("Option<IndexerStore>")
+        }
+
+        fn visit_seq<V>(self, mut seq: V) -> Result<Option<IndexerStore>, V::Error> where V: SeqAccess<'de> {
+            let option_bytes: Option<Vec<u8>> = seq
+                .next_element()?
+                .ok_or_else(|| serde::de::Error::invalid_length(0, &self))?;
+
+            option_bytes.map(|bytes| {
+                let reader = BufReader::new(bytes.as_slice());
+                let decoder = zstd::Decoder::new(reader)?;
+                let mut archive = Archive::new(decoder);
+                archive.unpack("./rocksdb_backup")?;
+                let backup_opts = BackupEngineOptions::new("./rocksdb_backup")?;
+                let backup_env = rocksdb::Env::new()?;
+                let mut backup_engine = BackupEngine::open(&backup_opts, &backup_env)?;
+                backup_engine.restore_from_latest_backup("./rocksdb", "./rocksdb", &RestoreOptions::default())?;
+                Ok(IndexerStore::new(&PathBuf::from("./rocksdb"))?)
+            }).map(|result| result.map_err(|e: anyhow::Error| serde::de::Error::custom(e.to_string())))
+            .map_or(Ok(None), |v| v.map(Some))
+        }
+    }
+    deserializer.deserialize_option(IndexerStoreVisitor)
+}
 
 #[derive(Serialize, Deserialize)]
 /// Rooted forest of precomputed block summaries aka the witness tree
@@ -47,6 +114,8 @@ pub struct IndexerState {
     /// needed for the possibility of missing blocks
     pub dangling_branches: Vec<Branch>,
     /// Block database
+    #[serde(serialize_with = "serialize_store")]
+    #[serde(deserialize_with = "deserialize_store")]
     pub indexer_store: Option<IndexerStore>,
     /// Threshold amount of confirmations to trigger a pruning event
     pub transition_frontier_length: u32,

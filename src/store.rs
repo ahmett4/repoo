@@ -3,21 +3,12 @@ use crate::{
     state::{
         ledger::{store::LedgerStore, Ledger},
         Canonicity,
-    },
+    }, 
 };
 use mina_serialization_types::{staged_ledger_diff::UserCommand, v1::UserCommandWithStatusV1};
-use rocksdb::{ColumnFamilyDescriptor, DBWithThreadMode, MultiThreaded};
-use serde::{
-    self,
-    de::{self, SeqAccess, Visitor},
-    ser::SerializeStruct,
-    Deserializer, Serializer,
-};
-use serde_derive::{Deserialize, Serialize};
+use rocksdb::{ColumnFamilyDescriptor, DBWithThreadMode, MultiThreaded, };
 use std::{
-    fmt,
-    marker::PhantomData,
-    path::{Path, PathBuf},
+    marker::PhantomData, path::{PathBuf, Path},
 };
 
 /// Storage Key
@@ -46,75 +37,16 @@ impl Key<Transaction> {
     }
 }
 
-pub fn serialize_database<S>(
-    db: &DBWithThreadMode<MultiThreaded>,
-    serializer: S,
-) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    let mut state = serializer.serialize_struct("MultiThreadedRocksDB", 1)?;
-    state.serialize_field("path", &db.path().display().to_string())?;
-    state.end()
-}
-
-pub fn deserialize_database<'de, D>(
-    deserializer: D,
-) -> Result<DBWithThreadMode<MultiThreaded>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    struct DatabaseVisitor;
-
-    impl<'de> Visitor<'de> for DatabaseVisitor {
-        type Value = DBWithThreadMode<MultiThreaded>;
-
-        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-            formatter.write_str("struct DBWithTreadMode<MultiThreaded>")
-        }
-
-        fn visit_seq<V>(self, mut seq: V) -> Result<DBWithThreadMode<MultiThreaded>, V::Error>
-        where
-            V: SeqAccess<'de>,
-        {
-            let path: String = seq
-                .next_element()?
-                .ok_or_else(|| de::Error::invalid_length(0, &self))?;
-
-            let mut cf_opts = rocksdb::Options::default();
-            cf_opts.set_max_write_buffer_number(16);
-            let blocks = ColumnFamilyDescriptor::new("blocks", cf_opts.clone());
-            let ledgers = ColumnFamilyDescriptor::new("ledgers", cf_opts.clone());
-            let canonicity = ColumnFamilyDescriptor::new("canonicity", cf_opts.clone());
-            let tx = ColumnFamilyDescriptor::new("tx", cf_opts);
-
-            let mut database_opts = rocksdb::Options::default();
-            database_opts.create_missing_column_families(true);
-            database_opts.create_if_missing(true);
-            let database = rocksdb::DBWithThreadMode::open_cf_descriptors(
-                &database_opts,
-                path,
-                vec![blocks, ledgers, canonicity, tx],
-            )
-            .map_err(|e| de::Error::custom(e.to_string()))?;
-
-            Ok(database)
-        }
-    }
-
-    const FIELDS: &[&str] = &["path"];
-    deserializer.deserialize_struct("MultiThreadedRocksDB", FIELDS, DatabaseVisitor)
-}
-
-#[derive(Serialize, Deserialize)]
 pub struct IndexerStore {
     db_path: PathBuf,
-    #[serde(serialize_with = "serialize_database")]
-    #[serde(deserialize_with = "deserialize_database")]
     database: DBWithThreadMode<MultiThreaded>,
 }
 
 impl IndexerStore {
+    pub fn db(&self) -> &DBWithThreadMode<MultiThreaded> {
+        &self.database
+    }
+
     pub fn new_read_only(path: &Path, secondary: &Path) -> anyhow::Result<Self> {
         let database_opts = rocksdb::Options::default();
         let database = rocksdb::DBWithThreadMode::open_cf_as_secondary(
