@@ -62,8 +62,8 @@ pub struct ServerArgs {
     /// Max stdout log level
     #[arg(long, default_value_t = LevelFilter::INFO)]
     log_level_stdout: LevelFilter,
-    /// Ignore restoring indexer state from an existing db on the path provided by database_dir
-    #[arg(short, long, default_value = None)]
+    /// Restore the Indexer State from a .indxr File
+    #[arg(short, long)]
     indxr_file: Option<PathBuf>,
     /// Interval for pruning the root branch
     #[arg(short, long, default_value_t = PRUNE_INTERVAL_DEFAULT)]
