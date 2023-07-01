@@ -134,7 +134,7 @@ pub async fn run(command: &ClientCli) -> Result<(), anyhow::Error> {
                 process::exit(100);
             }
 
-            let command = format!("save_indxr {}\0", out_dir.display());
+            let command = format!("save_state {}\0", out_dir.display());
             writer.write_all(command.as_bytes()).await?;
             reader.read_to_end(&mut buffer).await?;
             let response: String = bcs::from_bytes(&buffer)?;
