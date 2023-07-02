@@ -38,6 +38,7 @@ impl Key<Transaction> {
     }
 }
 
+#[derive(Debug)]
 pub struct IndexerStore {
     db_path: PathBuf,
     database: DBWithThreadMode<MultiThreaded>,

@@ -38,32 +38,48 @@ pub mod branch;
 pub mod ledger;
 pub mod summary;
 
+#[instrument(skip(serializer))]
 pub fn serialize_store<S>(store: &Option<IndexerStore>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
     match store {
-        None => serializer.serialize_none(),
+        None => {
+            trace!("serializing None IndexerStore");
+            serializer.serialize_none()
+        },
         Some(indexer_store) => {
+            trace!("serializing IndexerStore");
             let backup_tarball = (move || {
+                trace!("Initializing RocksDB BackupEngine");
                 let backup_opts = BackupEngineOptions::new("./rocksdb_backup")?;
                 let backup_env = rocksdb::Env::new()?;
                 let mut backup_engine = BackupEngine::open(&backup_opts, &backup_env)?;
+                trace!("Flushing database operations to disk and Creating new RocksDB Backup");
                 backup_engine.create_new_backup_flush(indexer_store.db(), true)?;
+                trace!("Creating temporary output file at ./rocksdb_backup.tar.zst");
                 let tarball_file = std::fs::File::create("./rocksdb_backup.tar.zst")?;
+                trace!("Initializing zstd encoder for {:?}", tarball_file);
                 let encoder =
                     zstd::Encoder::new(tarball_file, AMAZON_ATHENA_DEFAULT_ZSTD_COMPRESSION_LEVEL)?;
+                trace!("Creating new tar archive builder");
                 let mut tar = tar::Builder::new(encoder);
+                trace!("Adding the RocksDB backup to the archive");
                 tar.append_dir("rocksdb_backup", "./rocksdb_backup")?;
                 let mut tarball_file = tar.into_inner()?.finish()?;
+                trace!("Finalizing tarball file {:?}", tarball_file);
+                trace!("Reading compressed tarball to byte array");
                 let mut tarball_bytes = Vec::new();
                 tarball_file.read_to_end(&mut tarball_bytes)?;
+                trace!("Read {} bytes into byte array", tarball_bytes.len());
                 if std::fs::metadata("./rocksdb_backup.tar.zst").is_ok() {
+                    trace!("removing temporary tarball file");
                     std::fs::remove_file("./rocksdb_backup.tar.zst")?
                 }
                 Ok(tarball_bytes)
             })()
             .map_err(|e: anyhow::Error| ser::Error::custom(e.to_string()))?;
+            trace!("serializing compressed backup tarball as Some");
             serializer.serialize_some(&backup_tarball)
         }
     }
