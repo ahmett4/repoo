@@ -364,7 +364,7 @@ impl IndexerState {
         })
     }
 
-    #[instrument]
+    #[instrument(skip(self))]
     pub fn to_indxr_file(&self, out_dir: impl AsRef<Path> + std::fmt::Debug) -> anyhow::Result<()> {
         let mut indxr_file_path = PathBuf::from(out_dir.as_ref());
         let mut compressed_bytes = Vec::new();
@@ -391,7 +391,7 @@ impl IndexerState {
         Ok(())
     }
 
-    #[instrument]
+    #[instrument(skip(self))]
     pub fn from_indxr_file(
         indxr_file_path: impl AsRef<Path> + std::fmt::Debug,
     ) -> anyhow::Result<Option<Self>> {
@@ -426,7 +426,7 @@ impl IndexerState {
         Ok(indexer_state)
     }
 
-    #[instrument]
+    #[instrument(skip(self))]
     pub fn compress(&self, out: impl std::io::Write + std::fmt::Debug) -> anyhow::Result<()> {
         let mut encoder = zstd::Encoder::new(out, AMAZON_ATHENA_DEFAULT_ZSTD_COMPRESSION_LEVEL)?;
 
@@ -438,7 +438,7 @@ impl IndexerState {
         Ok(())
     }
 
-    #[instrument]
+    #[instrument(skip(self))]
     pub fn decompress(input: impl std::io::Read + std::fmt::Debug) -> anyhow::Result<Self> {
         let mut decoder = zstd::Decoder::new(input)?;
         let mut bytes = Vec::new();
