@@ -38,7 +38,7 @@ pub mod branch;
 pub mod ledger;
 pub mod summary;
 
-#[instrument(skip(serializer))]
+#[instrument(skip(store, serializer))]
 pub fn serialize_store<S>(store: &Option<IndexerStore>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
