@@ -391,7 +391,7 @@ impl IndexerState {
         Ok(())
     }
 
-    #[instrument(skip(self))]
+    #[instrument]
     pub fn from_indxr_file(
         indxr_file_path: impl AsRef<Path> + std::fmt::Debug,
     ) -> anyhow::Result<Option<Self>> {
@@ -438,7 +438,7 @@ impl IndexerState {
         Ok(())
     }
 
-    #[instrument(skip(self))]
+    #[instrument]
     pub fn decompress(input: impl std::io::Read + std::fmt::Debug) -> anyhow::Result<Self> {
         let mut decoder = zstd::Decoder::new(input)?;
         let mut bytes = Vec::new();
