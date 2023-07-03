@@ -66,7 +66,8 @@ where
                 let mut tar = tar::Builder::new(encoder);
                 trace!("Adding the RocksDB backup to the archive");
                 tar.append_dir("rocksdb_backup", "./rocksdb_backup")?;
-                let mut tarball_file = tar.into_inner()?.finish()?;
+                drop(tar.into_inner()?.finish()?);
+                let mut tarball_file = std::fs::File::open("./rocksdb_backup")?;
                 trace!("Finalizing tarball file {:?}", tarball_file);
                 trace!("Reading compressed tarball to byte array");
                 let mut tarball_bytes = Vec::new();
