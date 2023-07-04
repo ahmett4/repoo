@@ -73,6 +73,10 @@ where
                 let mut tarball_bytes = Vec::new();
                 tarball_file.read_to_end(&mut tarball_bytes)?;
                 trace!("Read {} bytes into byte array", tarball_bytes.len());
+                if std::fs::metadata("./rocksdb").is_ok() {
+                    trace!("removing rocksdb backup directory");
+                    std::fs::remove_dir_all("./rocksdb")?;
+                }
                 if std::fs::metadata("./rocksdb_backup.tar.zst").is_ok() {
                     trace!("removing temporary tarball file");
                     std::fs::remove_file("./rocksdb_backup.tar.zst")?
