@@ -54,7 +54,7 @@ pub struct IndexerState {
     /// needed for the possibility of missing blocks
     pub dangling_branches: Vec<Branch>,
     /// Block database
-    #[serde(with = "serialize_store", default, flatten)]
+    #[serde(with = "serialize_store", default)]
     pub indexer_store: Option<IndexerStore>,
     /// Threshold amount of confirmations to trigger a pruning event
     pub transition_frontier_length: u32,
