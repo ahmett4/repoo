@@ -164,7 +164,7 @@ pub struct IndexerState {
     /// needed for the possibility of missing blocks
     pub dangling_branches: Vec<Branch>,
     /// Block database
-    #[serde(default)]
+    #[serde(default, flatten)]
     #[serde(serialize_with = "serialize_store")]
     #[serde(deserialize_with = "deserialize_store")]
     pub indexer_store: Option<IndexerStore>,
