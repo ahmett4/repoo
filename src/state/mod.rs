@@ -90,6 +90,7 @@ where
     }
 }
 
+#[instrument(skip(deserializer))]
 pub fn deserialize_store<'de, D>(deserializer: D) -> Result<Option<IndexerStore>, D::Error>
 where
     D: Deserializer<'de>,
@@ -107,24 +108,30 @@ where
         where
             V: SeqAccess<'de>,
         {
+            trace!("deserializing bytes from Option");
             let option_bytes: Option<Vec<u8>> = seq
                 .next_element()?
                 .ok_or_else(|| serde::de::Error::invalid_length(0, &self))?;
 
+            trace!("got Option<Vec<u8>>, mapping database restore operation over Some value");
             option_bytes
                 .map(|bytes| {
                     let reader = BufReader::new(bytes.as_slice());
                     let decoder = zstd::Decoder::new(reader)?;
                     let mut archive = Archive::new(decoder);
+                    trace!("unpacking backup data into ./rocksdb_backup");
                     archive.unpack("./rocksdb_backup")?;
+                    trace!("initializing backup engine");
                     let backup_opts = BackupEngineOptions::new("./rocksdb_backup")?;
                     let backup_env = rocksdb::Env::new()?;
                     let mut backup_engine = BackupEngine::open(&backup_opts, &backup_env)?;
+                    trace!("restoring backup to ./rocksdb");
                     backup_engine.restore_from_latest_backup(
                         "./rocksdb",
                         "./rocksdb",
                         &RestoreOptions::default(),
                     )?;
+                    trace!("initializing IndexerStore with restored database instance");
                     IndexerStore::new(&PathBuf::from("./rocksdb"))
                 })
                 .map(|result| {
