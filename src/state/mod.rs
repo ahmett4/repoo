@@ -101,7 +101,7 @@ where
         type Value = Option<IndexerStore>;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            formatter.write_str("Option<IndexerStore>")
+            formatter.write_str("Option value")
         }
 
         fn visit_seq<V>(self, mut seq: V) -> Result<Option<IndexerStore>, V::Error>
