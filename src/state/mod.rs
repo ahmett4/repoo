@@ -376,8 +376,8 @@ impl IndexerState {
         self.compress(&mut compressed_bytes)?;
 
         let indexer_state_hash = blake3::hash(&compressed_bytes);
-        indxr_file_path.push(indexer_state_hash.to_string());
-        indxr_file_path.push(".indxr");
+        indxr_file_path.push(
+            format!("{}{}", indexer_state_hash.to_string(), ".indxr"));
         trace!(
             "writing compressed IndexerState with hash {} to {}",
             indexer_state_hash,
@@ -430,7 +430,7 @@ impl IndexerState {
         Ok(indexer_state)
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self, out))]
     pub fn compress(&self, out: impl std::io::Write + std::fmt::Debug) -> anyhow::Result<()> {
         let mut encoder = zstd::Encoder::new(out, AMAZON_ATHENA_DEFAULT_ZSTD_COMPRESSION_LEVEL)?;
 
@@ -442,7 +442,7 @@ impl IndexerState {
         Ok(())
     }
 
-    #[instrument]
+    #[instrument(skip(input))]
     pub fn decompress(input: impl std::io::Read + std::fmt::Debug) -> anyhow::Result<Self> {
         let mut decoder = zstd::Decoder::new(input)?;
         let mut bytes = Vec::new();
