@@ -18,22 +18,34 @@ use crate::{
     MAINNET_TRANSITION_FRONTIER_K, PRUNE_INTERVAL_DEFAULT,
 };
 use id_tree::NodeId;
+use rocksdb::backup::{BackupEngineOptions, BackupEngine, RestoreOptions};
 use serde_derive::{Deserialize, Serialize};
+use tar::Archive;
 use std::{
     collections::HashMap,
-    io::{Read, Write},
     path::{Path, PathBuf},
     str::FromStr,
 };
 use time::{Duration, OffsetDateTime, PrimitiveDateTime};
-use tracing::{debug, error, info, instrument, trace, warn};
+use tracing::{debug, error, info, instrument, trace};
 
 pub mod branch;
 pub mod ledger;
 pub mod summary;
-pub mod serialize_store;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct StateSnapshot {
+    root_branch: Branch,
+    best_tip: Tip,
+    canonical_tip: Tip,
+    diffs_map: HashMap<BlockHash, LedgerDiff>
+}
+
+pub trait StateStore {
+    fn store_state_snapshot(&self, snapshot: &StateSnapshot) -> anyhow::Result<()>;
+    fn read_snapshot(&self) -> anyhow::Result<Option<StateSnapshot>>;
+}
+
 /// Rooted forest of precomputed block summaries aka the witness tree
 /// `root_branch` - represents the tree of blocks connecting back to a known ledger state, e.g. genesis
 /// `dangling_branches` - trees of blocks stemming from an unknown ledger state
@@ -54,7 +66,6 @@ pub struct IndexerState {
     /// needed for the possibility of missing blocks
     pub dangling_branches: Vec<Branch>,
     /// Block database
-    #[serde(with = "serialize_store", default)]
     pub indexer_store: Option<IndexerStore>,
     /// Threshold amount of confirmations to trigger a pruning event
     pub transition_frontier_length: u32,
@@ -264,90 +275,105 @@ impl IndexerState {
         })
     }
 
-    #[instrument(skip(self))]
-    pub fn to_indxr_file(&self, out_dir: impl AsRef<Path> + std::fmt::Debug) -> anyhow::Result<()> {
-        let mut indxr_file_path = PathBuf::from(out_dir.as_ref());
-        let mut compressed_bytes = Vec::new();
-        trace!("compressing IndexerState");
-        self.compress(&mut compressed_bytes)?;
-
-        let indexer_state_hash = blake3::hash(&compressed_bytes);
-        indxr_file_path.push(
-            format!("{}{}", indexer_state_hash.to_string(), ".indxr"));
-        trace!(
-            "writing compressed IndexerState with hash {} to {}",
-            indexer_state_hash,
-            indxr_file_path.display()
-        );
-
-        if std::fs::metadata(&indxr_file_path).is_err() {
-            let mut file = std::fs::File::create(indxr_file_path)?;
-            file.write_all(&compressed_bytes)?;
-            drop(file)
-        } else {
-            warn!("indxr file {} already exists!", indxr_file_path.display());
+    pub fn to_state_snapshot(&self) -> StateSnapshot {
+        StateSnapshot {
+            root_branch: self.root_branch.clone(),
+            best_tip: self.best_tip.clone(),
+            canonical_tip: self.canonical_tip.clone(),
+            diffs_map: self.diffs_map.clone(),
         }
+    }
 
-        Ok(())
+    pub fn save_snapshot(&mut self, snapshot_path: impl AsRef<Path>) -> anyhow::Result<()> {
+        let snapshot = self.to_state_snapshot();
+        if let Some(indexer_store) = self.indexer_store.as_mut() {
+            let mut snapshot_file_path = PathBuf::from(snapshot_path.as_ref());
+            snapshot_file_path.push("indexer_snapshot.tar.zst");
+            indexer_store.store_state_snapshot(&snapshot)?;
+            trace!("Initializing RocksDB BackupEngine");
+            let backup_opts = BackupEngineOptions::new(snapshot_path)?;
+            let backup_env = rocksdb::Env::new()?;
+            let mut backup_engine = BackupEngine::open(&backup_opts, &backup_env)?;
+            trace!("Flushing database operations to disk and Creating new RocksDB Backup");
+            backup_engine.create_new_backup_flush(indexer_store.db(), true)?;
+            trace!("Creating output file at {}", snapshot_file_path.display());
+            let tarball_file = std::fs::File::create(snapshot_file_path)?;
+            trace!("Initializing zstd encoder for {:?}", tarball_file);
+            let encoder =
+                zstd::Encoder::new(tarball_file, AMAZON_ATHENA_DEFAULT_ZSTD_COMPRESSION_LEVEL)?;
+            trace!("Creating new tar archive builder");
+            let mut tar = tar::Builder::new(encoder);
+            trace!("Adding the RocksDB backup to the archive");
+            tar.append_dir_all("rocksdb_backup", "./rocksdb_backup")?;
+            trace!("Finalizing tarball file");
+            drop(tar.into_inner()?.finish()?);
+            Ok(())
+        } else {
+            Err(anyhow::Error::msg("cannot save snapshot, IndexerStore is None"))
+        }
+    }
+
+    pub fn from_state_snapshot(
+        rocksdb_path: impl AsRef<Path>,
+        transition_frontier_length: u32,
+        prune_interval: u32,
+        canonical_update_threshold: u32,
+    ) -> anyhow::Result<Self> {
+        let indexer_store = IndexerStore::new(rocksdb_path.as_ref())?;
+        if let Some(snapshot) = indexer_store.read_snapshot()? {
+            Ok(Self {
+                mode: IndexerMode::Full,
+                phase: IndexerPhase::Watching,
+                best_tip: snapshot.best_tip,
+                canonical_tip: snapshot.canonical_tip,
+                diffs_map: snapshot.diffs_map,
+                root_branch: snapshot.root_branch,
+                dangling_branches: Vec::new(),
+                indexer_store: Some(indexer_store),
+                transition_frontier_length,
+                prune_interval,
+                canonical_update_threshold,
+                blocks_processed: 0,
+                init_time: time::OffsetDateTime::now_utc(),
+            })
+        } else {
+            Err(anyhow::Error::msg("No state snapshot stored in rocksdb backup"))
+        }
     }
 
     #[instrument]
-    pub fn from_indxr_file(
-        indxr_file_path: impl AsRef<Path> + std::fmt::Debug,
-    ) -> anyhow::Result<Option<Self>> {
-        let file_extension = match indxr_file_path
-            .as_ref()
-            .to_string_lossy()
-            .split('.')
-            .collect::<Vec<&str>>()
-            .get(1)
-        {
-            None => {
-                error!(
-                    "indxr file path {} has wrong extension!",
-                    indxr_file_path.as_ref().display()
-                );
-                return Ok(None);
-            }
-            Some(file_extension) => file_extension.to_string(),
-        };
-
-        let mut indexer_state = None;
-        if "indxr" == file_extension && std::fs::metadata(&indxr_file_path).is_ok() {
-            trace!(
-                "reading indxr file at path {}",
-                indxr_file_path.as_ref().display()
-            );
-            let file = std::fs::File::open(indxr_file_path)?;
-            let deserialized_indexer_state = IndexerState::decompress(file)?;
-            indexer_state = Some(deserialized_indexer_state);
+    pub fn restore_from_snapshot(
+        snapshot_path: impl AsRef<Path> + std::fmt::Debug, 
+        database_path: impl AsRef<Path> + std::fmt::Debug,
+        transition_frontier_length: u32,
+        prune_interval: u32,
+        canonical_update_threshold: u32,
+    ) -> anyhow::Result<Self> {
+        let backup_tarball = std::fs::File::open(snapshot_path)?;
+        let decoder = zstd::Decoder::new(backup_tarball)?;
+        let mut archive = Archive::new(decoder);
+        trace!("unpacking backup data into ./rocksdb_backup");
+        archive.unpack("./rocksdb_backup")?;
+        let backup_opts = BackupEngineOptions::new("./rocksdb_backup")?;
+        let backup_env = rocksdb::Env::new()?;
+        let mut backup_engine = BackupEngine::open(&backup_opts, &backup_env)?;
+        trace!("restoring backup to ./rocksdb");
+        backup_engine.restore_from_latest_backup(
+            database_path.as_ref(),
+            database_path.as_ref(),
+            &RestoreOptions::default(),
+        )?;
+        trace!("initializing IndexerStore with restored database instance");
+        if std::fs::metadata("./rocksdb_backup").is_ok() {
+            std::fs::remove_dir_all("./rocksdb_backup")?;
         }
 
-        Ok(indexer_state)
-    }
-
-    #[instrument(skip(self, out))]
-    pub fn compress(&self, out: impl std::io::Write + std::fmt::Debug) -> anyhow::Result<()> {
-        let mut encoder = zstd::Encoder::new(out, AMAZON_ATHENA_DEFAULT_ZSTD_COMPRESSION_LEVEL)?;
-
-        let bytes = bcs::to_bytes(self)?;
-        trace!("compressing {} bytes for IndexerState", bytes.len());
-        encoder.write_all(&bytes)?;
-        encoder.finish()?;
-
-        Ok(())
-    }
-
-    #[instrument(skip(input))]
-    pub fn decompress(input: impl std::io::Read + std::fmt::Debug) -> anyhow::Result<Self> {
-        let mut decoder = zstd::Decoder::new(input)?;
-        let mut bytes = Vec::new();
-        let bytes_read = decoder.read_to_end(&mut bytes)?;
-        let _reader = decoder.finish();
-        trace!("decompressed {} bytes into IndexerState", bytes_read);
-
-        let indexer_state: IndexerState = bcs::from_bytes(&bytes)?;
-        Ok(indexer_state)
+        Self::from_state_snapshot(
+            database_path, 
+            transition_frontier_length, 
+            prune_interval, 
+            canonical_update_threshold
+        )
     }
 
     /// Creates a new indexer state from a db instance

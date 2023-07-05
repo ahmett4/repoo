@@ -2,11 +2,12 @@ use crate::{
     block::{precomputed::PrecomputedBlock, store::BlockStore, BlockHash},
     state::{
         ledger::{store::LedgerStore, Ledger},
-        Canonicity,
+        Canonicity, StateStore, StateSnapshot,
     },
 };
 use mina_serialization_types::{staged_ledger_diff::UserCommand, v1::UserCommandWithStatusV1};
 use rocksdb::{ColumnFamilyDescriptor, DBWithThreadMode, MultiThreaded};
+use serde_json::value::Index;
 use std::{
     marker::PhantomData,
     path::{Path, PathBuf},
@@ -233,5 +234,26 @@ impl IndexerStore {
             .property_int_value(rocksdb::properties::CUR_SIZE_ALL_MEM_TABLES)
             .unwrap()
             .unwrap()
+    }
+}
+
+impl StateStore for IndexerStore {
+    fn store_state_snapshot(&self, snapshot: &StateSnapshot) -> anyhow::Result<()> {
+        let key = b"STATE";
+        let value = bcs::to_bytes(snapshot)?;
+        self.database.put(key, value)?;
+        Ok(())
+    }
+
+    fn read_snapshot(&self) -> anyhow::Result<Option<StateSnapshot>> {
+        let mut snapshot = None;
+        if let Some(bytes) = self
+            .database
+            .get_pinned(b"STATE")?
+            .map(|bytes| bytes.to_vec())
+        {
+            snapshot = Some(bcs::from_bytes(&bytes)?);
+        }
+        Ok(snapshot)
     }
 }

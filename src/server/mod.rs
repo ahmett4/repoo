@@ -64,7 +64,7 @@ pub struct ServerArgs {
     log_level_stdout: LevelFilter,
     /// Restore the Indexer State from a .indxr File
     #[arg(short, long)]
-    indxr_file: Option<PathBuf>,
+    snapshot_path: Option<PathBuf>,
     /// Interval for pruning the root branch
     #[arg(short, long, default_value_t = PRUNE_INTERVAL_DEFAULT)]
     prune_interval: u32,
@@ -84,7 +84,7 @@ pub struct IndexerConfiguration {
     log_file: PathBuf,
     log_level: LevelFilter,
     log_level_stdout: LevelFilter,
-    indxr_file_path: Option<PathBuf>,
+    snapshot_path: Option<PathBuf>,
     prune_interval: u32,
     canonical_update_threshold: u32,
 }
@@ -109,7 +109,7 @@ pub async fn handle_command_line_arguments(
     let log_dir = args.log_dir;
     let log_level = args.log_level;
     let log_level_stdout = args.log_level_stdout;
-    let indxr_file_path = args.indxr_file;
+    let snapshot_path = args.snapshot_path;
     let prune_interval = args.prune_interval;
     let canonical_update_threshold = args.canonical_update_threshold;
 
@@ -155,7 +155,7 @@ pub async fn handle_command_line_arguments(
                 log_file: PathBuf::from(&log_fname),
                 log_level,
                 log_level_stdout,
-                indxr_file_path,
+                snapshot_path,
                 prune_interval,
                 canonical_update_threshold,
             })
@@ -182,7 +182,7 @@ pub async fn run(args: ServerArgs) -> Result<(), anyhow::Error> {
         log_file,
         log_level,
         log_level_stdout,
-        indxr_file_path,
+        snapshot_path,
         prune_interval,
         canonical_update_threshold,
     } = handle_command_line_arguments(args).await?;
@@ -206,10 +206,16 @@ pub async fn run(args: ServerArgs) -> Result<(), anyhow::Error> {
     } else {
         IndexerMode::Light
     };
-    let mut indexer_state = if let Some(indxr_file_path) = &indxr_file_path {
-        match IndexerState::from_indxr_file(indxr_file_path)? {
-            None => process::exit(100),
-            Some(indexer_state) => indexer_state,
+    let mut indexer_state = if let Some(snapshot_path) = &snapshot_path {
+        match IndexerState::restore_from_snapshot(
+            snapshot_path, 
+            &database_dir, 
+            MAINNET_TRANSITION_FRONTIER_K, 
+            prune_interval, 
+            canonical_update_threshold
+        ) {
+            Err(e) => {error!("{:?}", e); process::exit(100)},
+            Ok(indexer_state) => indexer_state,
         }
     } else {
         info!(
@@ -228,7 +234,7 @@ pub async fn run(args: ServerArgs) -> Result<(), anyhow::Error> {
     };
 
     let mut block_parser = BlockParser::new(&startup_dir)?;
-    if indxr_file_path.is_none() {
+    if snapshot_path.is_none() {
         if !non_genesis_ledger {
             indexer_state
                 .initialize_with_contiguous_canonical(&mut block_parser)
@@ -297,9 +303,9 @@ pub async fn run(args: ServerArgs) -> Result<(), anyhow::Error> {
             }
 
             save_rx_fut = save_rx.recv() => {
-                if let Some(SaveCommand(indxr_file_path)) = save_rx_fut {
-                    match indexer_state.to_indxr_file(&indxr_file_path) {
-                        Ok(_) => save_resp_tx.send(Some(SaveResponse("indxr file created".to_string())))?,
+                if let Some(SaveCommand(snapshot_path)) = save_rx_fut {
+                    match indexer_state.save_snapshot(snapshot_path) {
+                        Ok(_) => save_resp_tx.send(Some(SaveResponse("snapshot created".to_string())))?,
                         Err(e) => save_resp_tx.send(Some(SaveResponse(e.to_string())))?,
                     }
                 }
@@ -383,10 +389,10 @@ async fn handle_conn(
         "save_state" => {
             info!("Received save_state command");
             let data_buffer = buffers.next().unwrap();
-            let indxr_file_path = PathBuf::from(String::from_utf8(
+            let snapshot_path = PathBuf::from(String::from_utf8(
                 data_buffer[..data_buffer.len() - 1].to_vec(),
             )?);
-            save_tx.send(SaveCommand(indxr_file_path)).await?;
+            save_tx.send(SaveCommand(snapshot_path)).await?;
             // while !save_resp_rx.has_changed()? {}
             if let Some(resp) = save_resp_rx.recv()? {
                 let bytes = bcs::to_bytes(&resp)?;
