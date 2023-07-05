@@ -34,7 +34,7 @@ where
                 trace!("Creating new tar archive builder");
                 let mut tar = tar::Builder::new(encoder);
                 trace!("Adding the RocksDB backup to the archive");
-                tar.append_dir("rocksdb_backup", "./rocksdb_backup")?;
+                tar.append_dir_all("rocksdb_backup", "./rocksdb_backup")?;
                 drop(tar.into_inner()?.finish()?);
                 let mut tarball_file = std::fs::File::open("./rocksdb_backup.tar.zst")?;
                 trace!("Finalizing tarball file {:?}", tarball_file);
