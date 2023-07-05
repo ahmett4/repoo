@@ -64,13 +64,60 @@ pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<IndexerStore>, D::E
 where
     D: Deserializer<'de>,
 {
+    struct CompressedRocksDBBackupVisitor;
     struct IndexerStoreVisitor;
+
+    impl<'de> Visitor<'de> for CompressedRocksDBBackupVisitor {
+        type Value = Vec<u8>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("Compressed RocksDB Backup as Vec<u8>")
+        }
+
+        fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error, {
+            Ok(Vec::from(v))
+        }
+    }
 
     impl<'de> Visitor<'de> for IndexerStoreVisitor {
         type Value = Option<IndexerStore>;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
             formatter.write_str("Option<IndexerStore>")
+        }
+
+        fn visit_none<E>(self) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error, {
+            Ok(None)
+        }
+
+        fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+            where
+                D: Deserializer<'de>, {
+            let bytes = deserializer.deserialize_bytes(CompressedRocksDBBackupVisitor)?;
+            let indexer_store = (|| {
+                let reader = BufReader::new(bytes.as_slice());
+                let decoder = zstd::Decoder::new(reader)?;
+                let mut archive = Archive::new(decoder);
+                trace!("unpacking backup data into ./rocksdb_backup");
+                archive.unpack("./rocksdb_backup")?;
+                trace!("initializing backup engine");
+                let backup_opts = BackupEngineOptions::new("./rocksdb_backup")?;
+                let backup_env = rocksdb::Env::new()?;
+                let mut backup_engine = BackupEngine::open(&backup_opts, &backup_env)?;
+                trace!("restoring backup to ./rocksdb");
+                backup_engine.restore_from_latest_backup(
+                    "./rocksdb",
+                    "./rocksdb",
+                    &RestoreOptions::default(),
+                )?;
+                trace!("initializing IndexerStore with restored database instance");
+                IndexerStore::new(&PathBuf::from("./rocksdb"))
+           })().map_err(|e: anyhow::Error| serde::de::Error::custom(e.to_string()))?;
+           Ok(Some(indexer_store))
         }
 
         fn visit_seq<V>(self, mut seq: V) -> Result<Option<IndexerStore>, V::Error>
