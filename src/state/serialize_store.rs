@@ -70,7 +70,7 @@ where
         type Value = Option<IndexerStore>;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            formatter.write_str("Option value")
+            formatter.write_str("Option<IndexerStore>")
         }
 
         fn visit_seq<V>(self, mut seq: V) -> Result<Option<IndexerStore>, V::Error>
@@ -78,12 +78,9 @@ where
             V: SeqAccess<'de>,
         {
             trace!("deserializing bytes from Option");
-            let option_bytes: Option<Vec<u8>> = seq
-                .next_element()?
-                .ok_or_else(|| serde::de::Error::invalid_length(0, &self))?;
-
-            trace!("got Option<Vec<u8>>, mapping database restore operation over Some value");
-            option_bytes
+            seq
+                .next_element::<Option<Vec<u8>>>()?
+                .ok_or_else(|| serde::de::Error::invalid_length(0, &self))?
                 .map(|bytes| {
                     let reader = BufReader::new(bytes.as_slice());
                     let decoder = zstd::Decoder::new(reader)?;
