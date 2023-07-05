@@ -288,10 +288,12 @@ impl IndexerState {
         let snapshot = self.to_state_snapshot();
         if let Some(indexer_store) = self.indexer_store.as_mut() {
             let mut snapshot_file_path = PathBuf::from(snapshot_path.as_ref());
+            let mut rocksdb_backup_path = PathBuf::from(snapshot_path.as_ref());
             snapshot_file_path.push("indexer_snapshot.tar.zst");
+            rocksdb_backup_path.push("rocksdb_backup");
             indexer_store.store_state_snapshot(&snapshot)?;
             trace!("Initializing RocksDB BackupEngine");
-            let backup_opts = BackupEngineOptions::new(&snapshot_path)?;
+            let backup_opts = BackupEngineOptions::new(&rocksdb_backup_path)?;
             let backup_env = rocksdb::Env::new()?;
             let mut backup_engine = BackupEngine::open(&backup_opts, &backup_env)?;
             trace!("Flushing database operations to disk and Creating new RocksDB Backup");
@@ -304,7 +306,7 @@ impl IndexerState {
             trace!("Creating new tar archive builder");
             let mut tar = tar::Builder::new(encoder);
             trace!("Adding the RocksDB backup to the archive");
-            tar.append_dir_all("rocksdb_backup", &snapshot_path)?;
+            tar.append_dir_all("rocksdb_backup", &rocksdb_backup_path)?;
             trace!("Finalizing tarball file");
             drop(tar.into_inner()?.finish()?);
             Ok(())
