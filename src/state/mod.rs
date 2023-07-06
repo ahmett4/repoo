@@ -352,7 +352,7 @@ impl IndexerState {
         canonical_update_threshold: u32,
     ) -> anyhow::Result<Self> {
         let mut rocksdb_backup_path = PathBuf::from(snapshot_path.as_ref());
-        rocksdb_backup_path.push("rocksdb_backup");
+        rocksdb_backup_path.pop().push("rocksdb_backup");
         let backup_tarball = std::fs::File::open(snapshot_path)?;
         let decoder = zstd::Decoder::new(backup_tarball)?;
         let mut archive = Archive::new(decoder);
