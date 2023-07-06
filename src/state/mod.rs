@@ -351,23 +351,25 @@ impl IndexerState {
         prune_interval: u32,
         canonical_update_threshold: u32,
     ) -> anyhow::Result<Self> {
+        let mut rocksdb_backup_path = PathBuf::from(snapshot_path.as_ref());
+        rocksdb_backup_path.push("rocksdb_backup");
         let backup_tarball = std::fs::File::open(snapshot_path)?;
         let decoder = zstd::Decoder::new(backup_tarball)?;
         let mut archive = Archive::new(decoder);
         trace!("unpacking backup data into ./rocksdb_backup");
-        archive.unpack("./rocksdb_backup")?;
-        let backup_opts = BackupEngineOptions::new("./rocksdb_backup")?;
+        archive.unpack(&rocksdb_backup_path)?;
+        let backup_opts = BackupEngineOptions::new(&rocksdb_backup_path)?;
         let backup_env = rocksdb::Env::new()?;
         let mut backup_engine = BackupEngine::open(&backup_opts, &backup_env)?;
-        trace!("restoring backup to ./rocksdb");
+        trace!("restoring backup to {}", rocksdb_backup_path.display());
         backup_engine.restore_from_latest_backup(
             database_path.as_ref(),
             database_path.as_ref(),
             &RestoreOptions::default(),
         )?;
         trace!("initializing IndexerStore with restored database instance");
-        if std::fs::metadata("./rocksdb_backup").is_ok() {
-            std::fs::remove_dir_all("./rocksdb_backup")?;
+        if std::fs::metadata(&rocksdb_backup_path).is_ok() {
+            std::fs::remove_dir_all(rocksdb_backup_path)?;
         }
 
         Self::from_state_snapshot(
