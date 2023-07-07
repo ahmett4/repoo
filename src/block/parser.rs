@@ -199,7 +199,7 @@ impl BlockParser {
                             curr_length_idx = prev_length_idx;
                             count += 1;
                             curr_start_idx -= 1;
-                            continue;
+                            break;
                         }
                     }
                 }
