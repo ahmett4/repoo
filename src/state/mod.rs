@@ -279,13 +279,13 @@ impl IndexerState {
         }
     }
 
-    pub fn save_snapshot(&mut self, snapshot_path: impl AsRef<Path>) -> anyhow::Result<()> {
+    #[instrument(skip(self))]
+    pub fn save_snapshot_full(&mut self, snapshot_path: impl AsRef<Path> + std::fmt::Debug) -> anyhow::Result<()> {
         let snapshot = self.to_state_snapshot();
         if let Some(indexer_store) = self.indexer_store.as_mut() {
             let mut snapshot_file_path = PathBuf::from(snapshot_path.as_ref());
-            let mut rocksdb_backup_path = PathBuf::from(snapshot_path.as_ref());
             snapshot_file_path.push("indexer_snapshot.tar.zst");
-            rocksdb_backup_path.push("rocksdb_backup");
+            let rocksdb_backup_path = PathBuf::from(snapshot_path.as_ref());
             indexer_store.store_state_snapshot(&snapshot)?;
             trace!("Initializing RocksDB BackupEngine");
             let backup_opts = BackupEngineOptions::new(&rocksdb_backup_path)?;

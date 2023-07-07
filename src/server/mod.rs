@@ -309,7 +309,7 @@ pub async fn run(
 
             save_rx_fut = save_rx.recv() => {
                 if let Some(SaveCommand(snapshot_path)) = save_rx_fut {
-                    match indexer_state.save_snapshot(snapshot_path) {
+                    match indexer_state.save_snapshot_full(snapshot_path) {
                         Ok(_) => save_resp_tx.send(Some(SaveResponse("snapshot created".to_string())))?,
                         Err(e) => save_resp_tx.send(Some(SaveResponse(e.to_string())))?,
                     }
