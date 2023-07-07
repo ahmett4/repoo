@@ -374,7 +374,7 @@ fn extract_parent_hash_from_path(path: &Path) -> anyhow::Result<String> {
 
 /// Checks if there is a gap between the blocks at `path` and `curr_path`
 fn has_gap(path: &Path, curr_path: &Path) -> bool {
-    length_from_path(path).unwrap() + 1 < length_from_path(curr_path).unwrap()
+    length_from_path(path).unwrap_or(0) + 1 < length_from_path(curr_path).unwrap_or(0)
 }
 
 /// Checks if the block at `curr_path` is the parent of the block at `path`
