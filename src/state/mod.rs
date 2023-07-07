@@ -25,11 +25,10 @@ use std::{
     collections::HashMap,
     path::{Path, PathBuf},
     str::FromStr,
-    str::FromStr,
     sync::Arc,
-    time::{Duration, Instant},
+
 };
-use time::{Duration, OffsetDateTime, PrimitiveDateTime};
+use time::{OffsetDateTime, PrimitiveDateTime, Duration};
 use tracing::{debug, error, info, instrument, trace};
 
 pub mod branch;
@@ -331,7 +330,7 @@ impl IndexerState {
                 diffs_map: snapshot.diffs_map,
                 root_branch: snapshot.root_branch,
                 dangling_branches: Vec::new(),
-                indexer_store: Some(indexer_store),
+                indexer_store: Some(Arc::new(indexer_store)),
                 transition_frontier_length,
                 prune_interval,
                 canonical_update_threshold,
