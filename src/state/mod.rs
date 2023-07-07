@@ -25,11 +25,11 @@ use std::{
     collections::HashMap,
     path::{Path, PathBuf},
     str::FromStr,
-    sync::Arc,
+    sync::Arc, process,
 
 };
 use time::{OffsetDateTime, PrimitiveDateTime, Duration};
-use tracing::{debug, error, info, instrument, trace};
+use tracing::{debug, info, instrument, trace, error};
 
 pub mod branch;
 pub mod ledger;
@@ -38,8 +38,6 @@ pub mod summary;
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct StateSnapshot {
     root_branch: Branch,
-    best_tip: Tip,
-    canonical_tip: Tip,
     diffs_map: HashMap<BlockHash, LedgerDiff>
 }
 
@@ -277,8 +275,6 @@ impl IndexerState {
     pub fn to_state_snapshot(&self) -> StateSnapshot {
         StateSnapshot {
             root_branch: self.root_branch.clone(),
-            best_tip: self.best_tip.clone(),
-            canonical_tip: self.canonical_tip.clone(),
             diffs_map: self.diffs_map.clone(),
         }
     }
@@ -321,12 +317,36 @@ impl IndexerState {
         canonical_update_threshold: u32,
     ) -> anyhow::Result<Self> {
         let indexer_store = IndexerStore::new(rocksdb_path.as_ref())?;
+        
         if let Some(snapshot) = indexer_store.read_snapshot()? {
+            let best_tip_id = snapshot.root_branch.best_tip_id();
+            let best_tip = Tip {
+                state_hash: snapshot.root_branch.branches
+                    .get(&best_tip_id)
+                    .expect("best_tip_id guaranteed")
+                    .data().state_hash.clone(),
+                node_id: best_tip_id,
+            };
+
+            let canonical_tip_id = if let Some(canonical_tip_id) = snapshot.root_branch.canonical_tip_id(canonical_update_threshold) {
+                canonical_tip_id
+            } else {
+                error!("branch has no canonical tip!");
+                process::exit(100);
+            };
+            let canonical_tip = Tip {
+                state_hash: snapshot.root_branch.branches
+                    .get(&canonical_tip_id)
+                    .expect("canonical_tip_id guaranteed")
+                    .data().state_hash.clone(),
+                    node_id: canonical_tip_id
+            };
+
             Ok(Self {
                 mode: IndexerMode::Full,
                 phase: IndexerPhase::Watching,
-                best_tip: snapshot.best_tip,
-                canonical_tip: snapshot.canonical_tip,
+                best_tip,
+                canonical_tip,
                 diffs_map: snapshot.diffs_map,
                 root_branch: snapshot.root_branch,
                 dangling_branches: Vec::new(),

@@ -7,7 +7,6 @@ use crate::{
 };
 use mina_serialization_types::{staged_ledger_diff::UserCommand, v1::UserCommandWithStatusV1, signatures::SignatureJson};
 use rocksdb::{ColumnFamilyDescriptor, DBWithThreadMode, MultiThreaded, DB, DBIterator};
-use serde_json::value::Index;
 use std::{
     path::{Path, PathBuf},
     str::FromStr,
