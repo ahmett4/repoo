@@ -211,13 +211,16 @@ pub async fn run(
     };
     let mut indexer_state = if let Some(snapshot_path) = &snapshot_path {
         match IndexerState::restore_from_snapshot(
-            snapshot_path, 
-            &database_dir, 
-            MAINNET_TRANSITION_FRONTIER_K, 
-            prune_interval, 
-            canonical_update_threshold
+            snapshot_path,
+            &database_dir,
+            MAINNET_TRANSITION_FRONTIER_K,
+            prune_interval,
+            canonical_update_threshold,
         ) {
-            Err(e) => {error!("{:?}", e); process::exit(100)},
+            Err(e) => {
+                error!("{:?}", e);
+                process::exit(100)
+            }
             Ok(indexer_state) => indexer_state,
         }
     } else {

@@ -18,18 +18,18 @@ use crate::{
     MAINNET_TRANSITION_FRONTIER_K, PRUNE_INTERVAL_DEFAULT,
 };
 use id_tree::NodeId;
-use rocksdb::backup::{BackupEngineOptions, BackupEngine, RestoreOptions};
+use rocksdb::backup::{BackupEngine, BackupEngineOptions, RestoreOptions};
 use serde_derive::{Deserialize, Serialize};
-use tar::Archive;
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
+    process,
     str::FromStr,
-    sync::Arc, process,
-
+    sync::Arc,
 };
-use time::{OffsetDateTime, PrimitiveDateTime, Duration};
-use tracing::{debug, info, instrument, trace, error};
+use tar::Archive;
+use time::{Duration, OffsetDateTime, PrimitiveDateTime};
+use tracing::{debug, error, info, instrument, trace};
 
 pub mod branch;
 pub mod ledger;
@@ -38,7 +38,7 @@ pub mod summary;
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct StateSnapshot {
     root_branch: Branch,
-    diffs_map: HashMap<BlockHash, LedgerDiff>
+    diffs_map: HashMap<BlockHash, LedgerDiff>,
 }
 
 pub trait StateStore {
@@ -306,7 +306,9 @@ impl IndexerState {
             drop(tar.into_inner()?.finish()?);
             Ok(())
         } else {
-            Err(anyhow::Error::msg("cannot save snapshot, IndexerStore is None"))
+            Err(anyhow::Error::msg(
+                "cannot save snapshot, IndexerStore is None",
+            ))
         }
     }
 
@@ -317,29 +319,40 @@ impl IndexerState {
         canonical_update_threshold: u32,
     ) -> anyhow::Result<Self> {
         let indexer_store = IndexerStore::new(rocksdb_path.as_ref())?;
-        
+
         if let Some(snapshot) = indexer_store.read_snapshot()? {
             let best_tip_id = snapshot.root_branch.best_tip_id();
             let best_tip = Tip {
-                state_hash: snapshot.root_branch.branches
+                state_hash: snapshot
+                    .root_branch
+                    .branches
                     .get(&best_tip_id)
                     .expect("best_tip_id guaranteed")
-                    .data().state_hash.clone(),
+                    .data()
+                    .state_hash
+                    .clone(),
                 node_id: best_tip_id,
             };
 
-            let canonical_tip_id = if let Some(canonical_tip_id) = snapshot.root_branch.canonical_tip_id(canonical_update_threshold) {
+            let canonical_tip_id = if let Some(canonical_tip_id) = snapshot
+                .root_branch
+                .canonical_tip_id(canonical_update_threshold)
+            {
                 canonical_tip_id
             } else {
                 error!("branch has no canonical tip!");
                 process::exit(100);
             };
             let canonical_tip = Tip {
-                state_hash: snapshot.root_branch.branches
+                state_hash: snapshot
+                    .root_branch
+                    .branches
                     .get(&canonical_tip_id)
                     .expect("canonical_tip_id guaranteed")
-                    .data().state_hash.clone(),
-                    node_id: canonical_tip_id
+                    .data()
+                    .state_hash
+                    .clone(),
+                node_id: canonical_tip_id,
             };
 
             Ok(Self {
@@ -358,13 +371,15 @@ impl IndexerState {
                 init_time: time::OffsetDateTime::now_utc(),
             })
         } else {
-            Err(anyhow::Error::msg("No state snapshot stored in rocksdb backup"))
+            Err(anyhow::Error::msg(
+                "No state snapshot stored in rocksdb backup",
+            ))
         }
     }
 
     #[instrument]
     pub fn restore_from_snapshot(
-        snapshot_path: impl AsRef<Path> + std::fmt::Debug, 
+        snapshot_path: impl AsRef<Path> + std::fmt::Debug,
         database_path: impl AsRef<Path> + std::fmt::Debug,
         transition_frontier_length: u32,
         prune_interval: u32,
@@ -393,10 +408,10 @@ impl IndexerState {
         }
 
         Self::from_state_snapshot(
-            database_path, 
-            transition_frontier_length, 
-            prune_interval, 
-            canonical_update_threshold
+            database_path,
+            transition_frontier_length,
+            prune_interval,
+            canonical_update_threshold,
         )
     }
 
@@ -425,8 +440,6 @@ impl IndexerState {
 
         Ok(())
     }
-
-    
 
     /// The highest known canonical block
     pub fn canonical_tip_block(&self) -> &Block {

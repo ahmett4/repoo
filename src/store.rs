@@ -2,11 +2,13 @@ use crate::{
     block::{precomputed::PrecomputedBlock, store::BlockStore, BlockHash},
     state::{
         ledger::{store::LedgerStore, Ledger},
-        Canonicity, StateStore, StateSnapshot,
+        Canonicity, StateSnapshot, StateStore,
     },
 };
-use mina_serialization_types::{staged_ledger_diff::UserCommand, v1::UserCommandWithStatusV1, signatures::SignatureJson};
-use rocksdb::{ColumnFamilyDescriptor, DBWithThreadMode, MultiThreaded, DB, DBIterator};
+use mina_serialization_types::{
+    signatures::SignatureJson, staged_ledger_diff::UserCommand, v1::UserCommandWithStatusV1,
+};
+use rocksdb::{ColumnFamilyDescriptor, DBIterator, DBWithThreadMode, MultiThreaded, DB};
 use std::{
     path::{Path, PathBuf},
     str::FromStr,

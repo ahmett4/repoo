@@ -6,7 +6,7 @@ use id_tree::{
     RemoveBehavior::{DropChildren, OrphanChildren},
     Tree,
 };
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -77,10 +77,28 @@ impl Branch {
     }
 
     pub fn best_tip_id(&self) -> NodeId {
-        let mut best_tip_id = self.branches.root_node_id().expect("branch always has root node").clone();
-        for node_id in self.branches.traverse_post_order_ids(&best_tip_id).expect("branch always has root node") {
-            let best_tip = self.branches.get(&best_tip_id).expect("branch always has root node").data().clone();
-            let node = self.branches.get(&node_id).expect("node_id from iterator").data().clone();
+        let mut best_tip_id = self
+            .branches
+            .root_node_id()
+            .expect("branch always has root node")
+            .clone();
+        for node_id in self
+            .branches
+            .traverse_post_order_ids(&best_tip_id)
+            .expect("branch always has root node")
+        {
+            let best_tip = self
+                .branches
+                .get(&best_tip_id)
+                .expect("branch always has root node")
+                .data()
+                .clone();
+            let node = self
+                .branches
+                .get(&node_id)
+                .expect("node_id from iterator")
+                .data()
+                .clone();
             if best_tip.height > node.height {
                 best_tip_id = node_id.clone();
             }
@@ -91,7 +109,11 @@ impl Branch {
     pub fn canonical_tip_id(&self, canonical_update_threshold: u32) -> Option<NodeId> {
         let mut generation_removed = 0;
         let mut canonical_tip_id = self.best_tip_id();
-        for node_id in self.branches.ancestor_ids(&canonical_tip_id).expect("best tip guaranteed") {
+        for node_id in self
+            .branches
+            .ancestor_ids(&canonical_tip_id)
+            .expect("best tip guaranteed")
+        {
             canonical_tip_id = node_id.clone();
             generation_removed += 1;
             if generation_removed > canonical_update_threshold {
