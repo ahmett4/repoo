@@ -6,7 +6,8 @@ use id_tree::{
     RemoveBehavior::{DropChildren, OrphanChildren},
     Tree,
 };
-use serde::{Deserialize, Serialize};
+use serde::ser::SerializeStruct;
+use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
