@@ -406,6 +406,8 @@ impl IndexerState {
         Ok(())
     }
 
+    
+
     /// The highest known canonical block
     pub fn canonical_tip_block(&self) -> &Block {
         self.get_block_from_id(&self.canonical_tip.node_id)
