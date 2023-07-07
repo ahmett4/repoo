@@ -14,7 +14,7 @@ use std::{
     vec::IntoIter,
 };
 use tokio::io::AsyncReadExt;
-use tracing::{debug, info};
+use tracing::{debug, info, trace};
 
 pub enum SearchRecursion {
     None,
@@ -191,7 +191,9 @@ impl BlockParser {
                     };
 
                     for path in paths[prev_length_idx..curr_length_idx].iter() {
+                        trace!("checking if {path:?} is the parent of {curr_path:?}");
                         if extract_parent_hash_from_path(curr_path)? == hash_from_path(path) {
+                            trace!("{path:?} is the parent of {curr_path:?}");
                             canonical_paths.push(path.clone());
                             curr_path = path;
                             curr_length_idx = prev_length_idx;
