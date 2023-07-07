@@ -312,7 +312,7 @@ impl IndexerState {
         }
     }
 
-    pub fn from_state_snapshot(
+    pub fn from_snapshot_full(
         rocksdb_path: impl AsRef<Path>,
         transition_frontier_length: u32,
         prune_interval: u32,
@@ -378,7 +378,7 @@ impl IndexerState {
     }
 
     #[instrument]
-    pub fn restore_from_snapshot(
+    pub fn restore_from_snapshot_full(
         snapshot_path: impl AsRef<Path> + std::fmt::Debug,
         database_path: impl AsRef<Path> + std::fmt::Debug,
         transition_frontier_length: u32,
@@ -407,7 +407,7 @@ impl IndexerState {
             std::fs::remove_dir_all(rocksdb_backup_path)?;
         }
 
-        Self::from_state_snapshot(
+        Self::from_snapshot_full(
             database_path,
             transition_frontier_length,
             prune_interval,

@@ -210,7 +210,7 @@ pub async fn run(
         IndexerMode::Light
     };
     let mut indexer_state = if let Some(snapshot_path) = &snapshot_path {
-        match IndexerState::restore_from_snapshot(
+        match IndexerState::restore_from_snapshot_full(
             snapshot_path,
             &database_dir,
             MAINNET_TRANSITION_FRONTIER_K,
